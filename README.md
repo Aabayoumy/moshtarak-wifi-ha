@@ -217,7 +217,18 @@ Run everything with `sh tests/run_all.sh` in the add-on repo — 240 assertions.
 The rows above were first proved against the controller run directly. They were
 then re-proved with the controller running as an installed HA add-on, with the
 fake strip dialling the add-on's published callback port from another host, so
-the whole chain is covered rather than just the HTTP client:
+the whole chain is covered rather than just the HTTP client.
+
+That second pass used to be a sequence of ad-hoc commands, which meant the table
+below could not be reproduced by anyone else. It is now a script —
+[`tests/verify_live.py`](tests/verify_live.py) — run with:
+
+```sh
+python3 tests/verify_live.py
+```
+
+It restores the add-on's own options afterwards, so a failed run does not leave
+a protected outlet behind:
 
 | Check | Result |
 |---|---|
@@ -227,16 +238,35 @@ the whole chain is covered rather than just the HTTP client:
 | Switch **ON socket 2** via HA → strip received `up:onoff:3:on` | ✅ |
 | Switch states converge to match the wire after the poll interval | ✅ |
 | Protection set on channel 3 → switch 2 reports `protected: true` | ✅ |
-| Switch **OFF socket 2 (protected)** → refused locally, `onoff:3:off` count on the strip **0 before and after** | ✅ |
+| Switch **OFF socket 2 (protected)** → refused locally, `onoff:3:off` never appears on the strip | ✅ |
 | Controller HTTP API (8099) **not** reachable from the LAN; callback port (10086) is | ✅ |
 | `history.db` written under the mapped `/config` path, so HA backups include it | ✅ |
 | `no_real_strip` repair raised with the live host and device list | ✅ |
 | Host discovery incl. fork/mirror slugs, dict add-ons, absent hassio, unreachable Supervisor | 22 assertions ✅ |
+| **`tests/verify_live.py`, whole installed chain** | **39 checks ✅** |
+
+All four socket mappings are confirmed from bytes the strip received:
+
+| Physical socket | Firmware channel |
+|---|---|
+| 1 | 2 |
+| 2 | 3 |
+| 3 | 4 |
+| 4 | 1 |
+
+The script reads the controller through Home Assistant's diagnostics API rather
+than opening port 8099, because that port is closed deliberately — a test that
+required it open would defeat the reason it is closed.
 
 **Not yet verified:** behaviour on real hardware, since no MTTL-W01 is attached
 yet. Provisioning, the TCP callback and the measured socket/channel mapping all
 come from the source project's history rather than from this integration's own
 testing.
+
+No test asserts a power, energy or current **value**. Those readings are only as
+good as the fixture's synthetic fields, and one of them is known to be written
+in hex where the controller parses decimal — asserting them would validate the
+fixture rather than the integration.
 
 ### Known gap
 
