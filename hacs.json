@@ -1,0 +1,10 @@
+{
+  "name": "Moshtarak WiFi (TONLY MTTL-W01)",
+  "content_in_root": false,
+  "render_readme": true,
+  "homeassistant": "2024.11.0",
+  "hacs": "2.0.0",
+  "zip_release": false,
+  "filename": "moshtarak_wifi.zip",
+  "hide_default_branch": true
+}

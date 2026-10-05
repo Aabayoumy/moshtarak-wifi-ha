@@ -1,0 +1,239 @@
+"""Switch platform for Moshtarak WiFi.
+
+Read the note at the top of `api.py` before changing anything here. The wrong
+route from this file is not a theoretical mistake: an earlier version of this
+integration keyed four places on the controller's `id`, which is the firmware
+channel, and posted to the channel route. Every entity was labelled with a socket
+number while driving a different one, and on three of four outlets the label was
+simply a lie. The server survived by luck, because the controller refused OFF on
+the protected channel.
+
+So, stated as rules this module does not break:
+
+1. Entities are keyed on `socket`, the PHYSICAL number. Never on `id`/`channel`.
+2. Writes go through `MoshtarakApi.set_socket`, which only accepts 1-4.
+3. A protected outlet refuses OFF here, locally, before anything is sent.
+"""
+
+from __future__ import annotations
+
+import logging
+from typing import Any
+
+from homeassistant.components.switch import SwitchDeviceClass, SwitchEntity
+from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import HomeAssistantError
+from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers.update_coordinator import CoordinatorEntity
+
+from .api import MoshtarakProtectedError
+from .const import (
+    ATTR_DRAWS_CURRENT,
+    ATTR_PROTECTED,
+    ATTR_REACHABLE,
+    ATTR_SIMULATED,
+    ATTR_SOCKET,
+    ATTR_STATE_CODE,
+    DOMAIN,
+    SOCKET_COUNT,
+)
+from .coordinator import MoshtarakStateCoordinator, validate_scan_interval
+
+_LOGGER = logging.getLogger(__name__)
+
+
+async def async_setup_entry(
+    hass: HomeAssistant,
+    entry,
+    async_add_entities: AddEntitiesCallback,
+) -> None:
+    """Set up the switches for every strip this controller knows about."""
+    runtime = entry.runtime_data
+    coordinator: MoshtarakStateCoordinator = runtime.state
+    created: set[str] = set()
+
+    async def _add(devids: list[str]) -> None:
+        fresh = [devid for devid in devids if devid not in created]
+        if not fresh:
+            return
+        created.update(fresh)
+        async_add_entities(
+            [
+                MoshtarakSwitch(coordinator, devid, number)
+                for devid in fresh
+                for number in range(1, SOCKET_COUNT + 1)
+            ]
+        )
+
+    entry.async_on_unload(coordinator.async_register_platform(_add))
+    await _add(coordinator.known_strips)
+
+
+class MoshtarakSwitch(CoordinatorEntity[MoshtarakStateCoordinator], SwitchEntity):
+    """One physical outlet of one strip.
+
+    `devid` and `number` are the whole identity: a strip id and a PHYSICAL socket
+    number. The firmware channel is not stored on this entity at all, so it
+    cannot leak into an entity id, a unique_id or a name by accident.
+    """
+
+    _attr_has_entity_name = False
+    _attr_device_class = SwitchDeviceClass.OUTLET
+
+    def __init__(
+        self,
+        coordinator: MoshtarakStateCoordinator,
+        devid: str,
+        number: int,
+    ) -> None:
+        super().__init__(coordinator)
+        self._devid = devid
+        self._number = number
+
+        doc = coordinator.device_doc(devid) or {}
+        model = str(doc.get("model") or "MTTL-W01")
+        self._attr_unique_id = f"{devid}_socket_{number}"
+        self._attr_name = self._build_name(coordinator, number)
+        self._attr_device_info = {
+            "identifiers": {(DOMAIN, devid)},
+            "manufacturer": "TONLY / LG-U+",
+            "model": model,
+            "name": self._strip_name(doc, devid),
+        }
+
+    # -- naming ------------------------------------------------------
+
+    @staticmethod
+    def _strip_name(doc: dict[str, Any], devid: str) -> str:
+        if doc.get("simulated") or devid == "SIM":
+            return "MTTL-W01 (simulator)"
+        model = str(doc.get("model") or "MTTL-W01")
+        return f"{model} {devid}"
+
+    @staticmethod
+    def _is_default_name(name: str | None, number: int) -> bool:
+        """True for the controller's untouched default outlet name.
+
+        The controller's default is the literal English string "Socket N".
+        Treating it as absent is what stops an English fragment being spliced
+        into the middle of a translated interface - a bug that shipped once in
+        this project's Android app and could only be seen by rendering the
+        screen in that language.
+        """
+        if not name:
+            return True
+        return name.strip().lower() == f"socket {number}".strip()
+
+    def _build_name(self, coordinator: MoshtarakStateCoordinator, number: int) -> str:
+        entry = coordinator.socket(self._devid, number)
+        name = entry.get("name") if entry else None
+        if self._is_default_name(name, number):
+            # A neutral, translatable-by-nature label. The word is the only
+            # translatable part; the number is the same in every language.
+            return f"Socket {number}"
+        return str(name)
+
+    # -- state -------------------------------------------------------
+
+    @property
+    def _entry(self) -> dict[str, Any] | None:
+        return self.coordinator.socket(self._devid, self._number)
+
+    @property
+    def _is_protected(self) -> bool:
+        entry = self._entry
+        if entry is not None:
+            return bool(entry.get(ATTR_PROTECTED))
+        # No reading right now. Fall back to the strip's configured locks, which
+        # come from saved config rather than a live read and are therefore still
+        # trustworthy when the strip is asleep.
+        return self.coordinator.is_protected(self._devid, self._number)
+
+    @property
+    def available(self) -> bool:
+        """Whether this entity currently has a meaningful value.
+
+        Four conditions, and each exists for a specific reason:
+
+        - coordinator healthy: the controller itself is answering;
+        - a REAL strip: the simulator is not presented as the user's hardware;
+        - settled: the post-restart all-zero block is not read as truth;
+        - reachable: this particular strip is answering.
+        """
+        if not self.coordinator.last_update_success:
+            return False
+        if not self.coordinator.is_real_strip(self._devid):
+            return False
+        if not self.coordinator.is_settled(self._devid):
+            return False
+        if not self.coordinator.is_reachable(self._devid):
+            return False
+        return self._entry is not None
+
+    @property
+    def is_on(self) -> bool:
+        entry = self._entry
+        return bool(entry.get("on")) if entry else False
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        entry = self._entry or {}
+        attrs: dict[str, Any] = {
+            ATTR_SOCKET: self._number,
+            ATTR_PROTECTED: self._is_protected,
+            ATTR_REACHABLE: bool(entry.get(ATTR_REACHABLE, False)),
+        }
+        if entry:
+            attrs[ATTR_DRAWS_CURRENT] = bool(entry.get(ATTR_DRAWS_CURRENT))
+            # Carried as opaque diagnostics. These two fields read "on" on an
+            # EMPTY socket, so they are not overload and not overheat, and this
+            # integration will not invent an interpretation for them.
+            attrs[ATTR_STATE_CODE] = {
+                "flag3": entry.get("flag3"),
+                "flag4": entry.get("flag4"),
+                "code": entry.get("state_code"),
+            }
+        return attrs
+
+    # -- writes ------------------------------------------------------
+
+    async def _async_drive(self, on: bool) -> None:
+        if not on and self._is_protected:
+            # Refused here, not sent and rejected later. The controller would
+            # answer 409 with the same information, but a user tapping a switch
+            # should get the reason immediately rather than a failed command
+            # that appears to have been sent.
+            raise HomeAssistantError(
+                f"Socket {self._number} is protected: this outlet cannot be "
+                "switched off, whatever asks. It can still be switched back ON to "
+                "restore power. Remove it from the controller's protection list "
+                "if that is not what you want."
+            )
+
+        try:
+            await self.coordinator.api.set_socket(
+                self._number, on, device=self._devid
+            )
+        except MoshtarakProtectedError as err:
+            # The controller's own wording leads the message. It names the
+            # physical socket and says why, which is exactly what a generic
+            # "failed" would throw away.
+            raise HomeAssistantError(str(err)) from err
+        except Exception as err:  # noqa: BLE001
+            raise HomeAssistantError(
+                f"Could not switch socket {self._number}: {err}"
+            ) from err
+
+        # Do not flip the switch optimistically. Relay state echoes back within
+        # 1-2s and the physical relay can take up to 20s to close, so an
+        # immediate optimistic read would claim power that has not arrived.
+        await self.coordinator.async_request_refresh()
+
+    async def async_turn_on(self, **kwargs: Any) -> None:
+        await self._async_drive(True)
+
+    async def async_turn_off(self, **kwargs: Any) -> None:
+        await self._async_drive(False)
+
+
+__all__ = ["MoshtarakSwitch", "async_setup_entry"]
