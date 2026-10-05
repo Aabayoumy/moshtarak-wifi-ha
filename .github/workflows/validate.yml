@@ -1,0 +1,26 @@
+name: Validate
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    # Weekly, so a Home Assistant release that breaks this gets noticed even
+    # when nobody has pushed anything.
+    - cron: "23 6 * * 1"
+
+jobs:
+  hassfest:
+    name: hassfest + HACS
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: HACS validation
+        uses: hacs/action@main
+        with:
+          category: integration
+          ignore: brands
+
+      - name: Home Assistant hassfest
+        uses: home-assistant/actions/hassfest@master
