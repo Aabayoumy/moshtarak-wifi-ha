@@ -39,15 +39,47 @@ Neither works alone.
 
 ## Install
 
-1. Install the **`Moshtarak WiFi`** app/add-on from its repository and start it.
+1. **Settings → Apps → ⋮ → Repositories**, add:
+
+   ```
+   https://github.com/Aabayoumy/moshtarak-wifi-addon
+   ```
+
+   Then install and start **Moshtarak WiFi** from it.
+
+   The add-on has to be added this way once, by hand: HACS distributes
+   *integrations*, and the Supervisor distributes add-ons, so the two can never
+   come from a single tap.
+
 2. In HACS → Integrations → **Moshtarak WiFi (TONLY MTTL-W01)** → Download.
 3. Restart Home Assistant.
-4. **Settings → Devices & Services → Add Integration → Moshtarak WiFi.** Accept
-   the suggested controller address; change it only if you moved the add-on.
+4. **Settings → Devices & Services → Add Integration → Moshtarak WiFi.**
 
-Setup asks one question — where the controller is — and validates it with
-`/api/health`, which answers 200 even with **zero strips connected**. So you can
-install and configure everything before the hardware exists.
+In the ordinary case there is nothing to type on step 4. The flow asks the
+Supervisor where the add-on is, connects to it, and creates the entry on the
+first click — see [Where the controller is](#where-the-controller-is). If you
+installed the add-on from a fork, or run the controller some other way, the form
+appears instead and you enter the address yourself.
+
+The connection is validated with `/api/health`, which answers 200 even with
+**zero strips connected**. So you can install and configure everything before the
+hardware exists.
+
+### Where the controller is
+
+The add-on's container name is derived from a hash of its repository URL, so it
+is different for a fork or a mirror and cannot be hardcoded — an earlier version
+of this integration shipped a guessed name that could never have connected. The
+config flow therefore asks the Supervisor which add-on is installed and derives
+the address from that.
+
+Two details worth knowing if you set it manually:
+
+- The address is the add-on's container hostname (underscores replaced with
+  dashes), **not** your Home Assistant's own address, because the controller's
+  HTTP API is deliberately not published to your LAN.
+- It is reachable only from Home Assistant, since the add-on runs on the
+  Supervisor's internal network.
 
 ## Entities
 
@@ -176,14 +208,46 @@ protocol-level fake strip, capturing the exact bytes the strip received:
 | Unanswerable voltage query → `unavailable`, not a fabricated `0` | ✅ |
 | `settled` absent during the post-restart window → treated as unavailable | ✅ |
 | Controller suites (`api`, `two_strip`, `probe`, `protect`) | 169 assertions ✅ |
-| Add-on wiring contract (`tests/test_addon_contract.py`) | 51 assertions ✅ |
+| Add-on wiring contract (`tests/test_addon_contract.py`) | 71 assertions ✅ |
 
-Run everything with `sh tests/run_all.sh` in the add-on repo — 220 assertions.
+Run everything with `sh tests/run_all.sh` in the add-on repo — 240 assertions.
+
+### Verified again through the real add-on
+
+The rows above were first proved against the controller run directly. They were
+then re-proved with the controller running as an installed HA add-on, with the
+fake strip dialling the add-on's published callback port from another host, so
+the whole chain is covered rather than just the HTTP client:
+
+| Check | Result |
+|---|---|
+| Add-on installs, builds and starts under the Supervisor | ✅ |
+| Config flow completes with **no address typed** — hostname read from the Supervisor | ✅ |
+| Switch **OFF socket 1** via HA → strip received `up:onoff:2:off` | ✅ |
+| Switch **ON socket 2** via HA → strip received `up:onoff:3:on` | ✅ |
+| Switch states converge to match the wire after the poll interval | ✅ |
+| Protection set on channel 3 → switch 2 reports `protected: true` | ✅ |
+| Switch **OFF socket 2 (protected)** → refused locally, `onoff:3:off` count on the strip **0 before and after** | ✅ |
+| Controller HTTP API (8099) **not** reachable from the LAN; callback port (10086) is | ✅ |
+| `history.db` written under the mapped `/config` path, so HA backups include it | ✅ |
+| `no_real_strip` repair raised with the live host and device list | ✅ |
+| Host discovery incl. fork/mirror slugs, dict add-ons, absent hassio, unreachable Supervisor | 22 assertions ✅ |
 
 **Not yet verified:** behaviour on real hardware, since no MTTL-W01 is attached
 yet. Provisioning, the TCP callback and the measured socket/channel mapping all
 come from the source project's history rather than from this integration's own
 testing.
+
+### Known gap
+
+Entities for a strip are added when the controller first reports it, but are
+**never removed**. If a strip is forgotten by the controller entirely — factory
+reset, a different device id, a stale entry in the controller's own config — its
+entities stay in Home Assistant forever as `unavailable`, and there is no code
+path that deletes them. A disconnected-but-known strip is handled correctly
+(this is the common case: the controller keeps the device and reports
+`connected: false`), so this only bites when the controller drops the device
+outright.
 
 ## Licence
 

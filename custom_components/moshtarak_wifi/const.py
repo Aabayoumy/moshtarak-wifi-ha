@@ -22,14 +22,14 @@ from typing import Final
 
 DOMAIN: Final = "moshtarak_wifi"
 
-# Fallback controller URLs, tried in order during setup. The first is the
-# documented add-on convention (slug form); the second is the hostname the
-# Supervisor reports; the third suits a Core-only or host-network install.
-DEFAULT_HOSTS: Final = (
-    "http://a0d7b954_moshtarak_wifi:8099",
-    "http://a0d7b954-moshtarak-wifi:8099",
-    "http://localhost:8099",
-)
+# There is deliberately no hardcoded controller host here.
+#
+# The first version of this integration carried
+#     "http://a0d7b954_moshtarak_wifi:8099"
+# as its default, which was wrong twice over: the repository prefix was guessed
+# and never resolved, and in any case an add-on's slug is derived from a hash of
+# the repository URL, so every fork and mirror gets a different container name.
+# See host_discovery.py, which asks the Supervisor at runtime instead.
 
 # The controller caches reads for MOSHTARAK_WIFI_POLL seconds (5 by default), so
 # polling faster than this gains nothing but load. 5s also keeps a switch reading

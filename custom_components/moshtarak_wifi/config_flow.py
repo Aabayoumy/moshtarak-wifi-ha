@@ -6,8 +6,13 @@ without hardware yet, a validation that required a live strip would make the
 integration impossible to install and impossible to develop against, which is
 the opposite of what is wanted.
 
-The host that answered is stored, so the first successful detection is not
-repeated on every reload.
+Before showing the form, the flow asks the Supervisor where the add-on actually
+is and probes the candidates itself. In the ordinary case - add-on installed,
+running, nothing else to do - that means setup completes on a single click with
+no address typed at all, and no opportunity to mistype one. Only when nothing
+answers does the form appear.
+
+The address that answered is stored, so discovery is not repeated on reload.
 """
 
 from __future__ import annotations
@@ -21,18 +26,29 @@ from homeassistant.config_entries import ConfigFlow, ConfigFlowResult, OptionsFl
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .api import MoshtarakApi, MoshtarakApiError
-from .const import CONF_HOST, CONF_SCAN_INTERVAL, DEFAULT_HOSTS, DOMAIN
+from .const import CONF_HOST, CONF_SCAN_INTERVAL, DOMAIN
+from .host_discovery import async_candidate_hosts
 
 _LOGGER = logging.getLogger(__name__)
 
 
-def _schema(default_host: str = "") -> vol.Schema:
+async def _probe(session, host: str) -> bool:
+    """Return True if a healthy controller answers at `host`."""
+    try:
+        health = await MoshtarakApi(session, host).health()
+    except MoshtarakApiError as err:
+        _LOGGER.debug("Controller probe failed for %s: %s", host, err)
+        return False
+    return bool(health.get("ok"))
+
+
+def _schema(default_host: str = "", scan_interval: int = 5) -> vol.Schema:
     return vol.Schema(
         {
             vol.Required(CONF_HOST, default=default_host): str,
-            vol.Optional(CONF_SCAN_INTERVAL, default=5): vol.All(
-                vol.Coerce(int), vol.Range(min=5, max=300)
-            ),
+            vol.Optional(
+                CONF_SCAN_INTERVAL, default=scan_interval
+            ): vol.All(vol.Coerce(int), vol.Range(min=5, max=300)),
         }
     )
 
@@ -42,40 +58,62 @@ class MoshtarakConfigFlow(ConfigFlow, domain=DOMAIN):
 
     VERSION = 1
 
+    def __init__(self) -> None:
+        """Note candidates probed before the form was ever shown."""
+        self._suggested: str = ""
+
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        """Ask for the controller address."""
-        errors: dict[str, str] = {}
-
+        """Find the controller, or ask where it is."""
         if user_input is not None:
             host = str(user_input[CONF_HOST]).strip().rstrip("/")
-            session = async_get_clientsession(self.hass)
-            api = MoshtarakApi(session, host)
-            try:
-                health = await api.health()
-            except MoshtarakApiError as err:
-                _LOGGER.debug("Controller probe failed for %s: %s", host, err)
-                errors["base"] = "cannot_connect"
-            else:
-                if not health.get("ok"):
-                    errors["base"] = "cannot_connect"
-                else:
-                    return self.async_create_entry(
-                        title=host,
-                        data={CONF_HOST: host},
-                        options={CONF_SCAN_INTERVAL: user_input.get(CONF_SCAN_INTERVAL, 5)},
-                    )
+            if await _probe(async_get_clientsession(self.hass), host):
+                return self.async_create_entry(
+                    title=host,
+                    data={CONF_HOST: host},
+                    options={
+                        CONF_SCAN_INTERVAL: user_input.get(CONF_SCAN_INTERVAL, 5)
+                    },
+                )
+            # Keep whatever the user typed so a typo can be corrected rather
+            # than retyped from memory.
+            return self.async_show_form(
+                step_id="user",
+                data_schema=_schema(host, user_input.get(CONF_SCAN_INTERVAL, 5)),
+                errors={"base": "cannot_connect"},
+                description_placeholders={
+                    "default_host": self._suggested,
+                    "discovered": "yes" if self._suggested else "no",
+                },
+            )
 
-        suggested = str(user_input.get(CONF_HOST, "")) if user_input else ""
-        if not suggested:
-            suggested = DEFAULT_HOSTS[0]
+        # No input yet: ask the Supervisor where the add-on is and try it. This
+        # is what lets the common case finish without the user typing anything.
+        session = async_get_clientsession(self.hass)
+        candidates = await async_candidate_hosts(self.hass)
+
+        for host in candidates:
+            if await _probe(session, host):
+                self._suggested = host
+                return self.async_create_entry(
+                    title=host,
+                    data={CONF_HOST: host},
+                    options={CONF_SCAN_INTERVAL: 5},
+                )
+
+        # Nothing answered. Offer the best guess prefilled rather than an empty
+        # box, but make clear in the field description that it is a guess.
+        self._suggested = candidates[0] if candidates else ""
 
         return self.async_show_form(
             step_id="user",
-            data_schema=_schema(suggested),
-            errors=errors,
-            description_placeholders={"default_host": DEFAULT_HOSTS[0]},
+            data_schema=_schema(self._suggested),
+            errors={},
+            description_placeholders={
+                "default_host": self._suggested,
+                "discovered": "yes" if self._suggested else "no",
+            },
         )
 
     async def async_step_import(self, import_data: dict[str, Any]) -> ConfigFlowResult:

@@ -1,12 +1,17 @@
 {
   "domain": "moshtarak_wifi",
   "name": "Moshtarak WiFi (TONLY MTTL-W01)",
-  "codeowners": ["@Aabayoumy"],
+  "codeowners": [
+    "@Aabayoumy"
+  ],
   "config_flow": true,
   "documentation": "https://github.com/Aabayoumy/moshtarak-wifi-ha",
   "integration_type": "hub",
   "iot_class": "local_polling",
   "issue_tracker": "https://github.com/Aabayoumy/moshtarak-wifi-ha/issues",
   "requirements": [],
-  "version": "1.0.0"
+  "version": "1.0.0",
+  "after_dependencies": [
+    "hassio"
+  ]
 }

@@ -3,7 +3,7 @@
     "step": {
       "user": {
         "title": "Moshtarak WiFi (TONLY MTTL-W01)",
-        "description": "Where is the Moshtarak WiFi controller?\n\nIf you installed the Moshtarak WiFi app/add-on, leave this as the suggested address. The strip itself is not configured here - the controller is the thing that talks to it.\n\nThe address is not your Home Assistant's own address unless the controller is running on the same host."
+        "description": "Where is the Moshtarak WiFi controller?\n\nIf you installed the Moshtarak WiFi app/add-on, leave this as the suggested address - it is read from the Supervisor rather than guessed. The strip itself is not configured here: the controller is the thing that talks to it.\n\nThe address is not your Home Assistant's own address unless the controller is running on the same host."
       }
     },
     "error": {
