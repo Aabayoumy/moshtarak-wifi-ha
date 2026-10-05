@@ -1,0 +1,197 @@
+# Moshtarak WiFi — Home Assistant integration
+
+Controls a **TONLY / LG-U+ MTTL-W01** four-socket Wi-Fi power strip in Home
+Assistant.
+
+[![HACS Custom](https://img.shields.io/badge/HACS-Custom-41BDF5.svg)](https://hacs.xyz)
+[![GitHub release](https://img.shields.io/github/release/Aabayoumy/moshtarak-wifi-ha.svg)](https://github.com/Aabayoumy/moshtarak-wifi-ha/releases)
+
+---
+
+## This is only half of it
+
+This integration **cannot talk to the strip**. It talks to a *controller*, which
+is the thing that talks to the strip.
+
+```
+MTTL-W01 strip  ──dials out to TCP 10086──▶  app/add-on (the controller)
+                                                  │
+                                                  │ HTTP, internal only
+                                                  ▼
+                                           this integration
+```
+
+That split is not a preference, it is forced by the hardware. The strip never
+accepts an inbound connection — ports 10086, 30888, 80 and 8080 are all closed
+on it, and the address it "reports" for itself is the *source port it dialled out
+from*. Something has to be listening, and putting a socket protocol client inside
+Home Assistant's event loop would mean giving up the timers and history that keep
+the controller honest.
+
+So you need both:
+
+| Part | Where | What it is |
+|---|---|---|
+| `moshtarak-wifi-addon` | Home Assistant app/add-on | The controller. Speaks the vendor protocol. |
+| `moshtarak-wifi-ha` | **this repo**, via HACS | The integration. Creates the entities. |
+
+Neither works alone.
+
+## Install
+
+1. Install the **`Moshtarak WiFi`** app/add-on from its repository and start it.
+2. In HACS → Integrations → **Moshtarak WiFi (TONLY MTTL-W01)** → Download.
+3. Restart Home Assistant.
+4. **Settings → Devices & Services → Add Integration → Moshtarak WiFi.** Accept
+   the suggested controller address; change it only if you moved the add-on.
+
+Setup asks one question — where the controller is — and validates it with
+`/api/health`, which answers 200 even with **zero strips connected**. So you can
+install and configure everything before the hardware exists.
+
+## Entities
+
+Per strip (four sockets each):
+
+| Entity | Notes |
+|---|---|
+| `switch.*_socket_1..4` | `device_class: outlet`. Keyed on **physical socket number**. |
+| `sensor.*_socket_N_temperature` | Real. Field 11 of the status block. |
+| `sensor.*_socket_N_power_raw` | The vendor's integer, untouched. The only part of the power reading that is not a guess. |
+| `sensor.*_socket_N_power_(vendor_scale,_unverified)` | Unit W, **no `device_class`** — see below. |
+| `sensor.*_socket_N_energy_(vendor_scale,_unverified)` | Unit kWh, **no `device_class`**. |
+| `sensor.*_socket_N_state_code` | `00` normal, `AB` relay open with residual current. Shown raw. |
+| `binary_sensor.*_socket_N_draws_power` | Something is drawing through this outlet. |
+| `binary_sensor.*_socket_N_protected` | This outlet refuses to be switched off. |
+
+Per strip:
+
+| Entity | Notes |
+|---|---|
+| `sensor.*_mains_voltage` | Real, from an active query. Carries `voltage_spread_v` so disagreement between channels is visible rather than averaged away. |
+| `sensor.*_wi_fi_signal_strength` | RSSI. |
+| `binary_sensor.*_real_strip_connected` | **Read this one first.** |
+
+There is a [diagnostics download](https://www.home-assistant.io/integrating/\
+diagnostics/) per entry that includes the socket/channel mapping, raw per-strip
+state and the controller's own view.
+
+## Three things this integration refuses to do
+
+### 1. Pretend the simulator is your hardware
+
+With no strip connected, the controller still answers `/api/state` with four
+healthy sockets, `reachable: true` and `settled: true` — because its built-in
+simulator reports as device `SIM`. **Neither flag means your strip is answering.**
+
+So every availability decision here asks whether a *real* strip answered.
+`binary_sensor.*_real_strip_connected` is `off` when nothing real is present, the
+switches go `unavailable` rather than reporting simulator state as fact, and a
+**repairs issue** appears explaining why. An integration that showed four
+working-looking switches in that state would be showing a facade.
+
+### 2. Calibrate watts it cannot calibrate
+
+The vendor divides by 1000. A measured 60 W load read back as **16.75 W**. So
+the watt sensor has a unit and a state class but deliberately **no
+`device_class: power`** — that class is what feeds the energy dashboard as
+though a value were calibrated. Its name says *unverified* out loud, and the raw
+integer sits beside it.
+
+**There is no current sensor.** The strip exposes none: every firmware channel
+returns mains voltage and nothing else. An upstream project claims
+"under 50000 means milliamps"; that is false on real hardware. With no current,
+watts can never be converted to amps, so a permanently `unavailable` sensor would
+be noise pretending to be a feature. Voltage carries a
+`current_available: false` attribute so the absence is a stated fact rather than
+a mystery.
+
+### 3. Invent meanings for fields it does not understand
+
+Status fields 3 and 4 read `on` on **every** channel, including a completely
+empty socket. They are not overload and not overheat. An earlier version of this
+project's code interpreted them as safety flags and produced `overload: true` on
+an empty outlet, which is how the mistake was caught. They are carried as
+unlabelled `flag3`/`flag4` diagnostics.
+
+## The socket/channel trap
+
+The strip's firmware numbers its channels differently from how the sockets are
+physically arranged:
+
+```
+physical socket 1 → firmware channel 2
+physical socket 2 → firmware channel 3
+physical socket 3 → firmware channel 4
+physical socket 4 → firmware channel 1
+```
+
+This is **measured, not derived.** Getting it backwards switches the wrong
+outlet, and it caused the two most serious incidents in this project's history —
+once in an Android app, and once in an earlier version of this integration where
+four entities were labelled with socket numbers while driving different channels
+(three of four wrong; the server survived only because protection refused the
+command).
+
+So: entities are keyed on `socket`, writes go to
+`POST /api/switch/socket/<n>`, and the firmware channel appears **only** in
+diagnostics. The controller still exposes the channel route, labelled
+`legacy, used by HA` in its own source — do not use it. `MoshtarakApi` has no
+`set_channel` method, and `set_socket()` rejects anything outside 1–4.
+
+## Protection
+
+A protected outlet refuses to be switched **off**, whatever asks — the app, Home
+Assistant, the web UI, an automation, a timer, a stray `curl`. Power can always
+be restored, so a protected switch is still fully switchable *on*.
+
+The refusal happens in this integration *before* anything is sent, so a tap
+fails immediately with the reason rather than appearing to work. The controller
+enforces it again server-side; both paths are tested.
+
+Configure it in the add-on options, not here. Keep the legacy `protect` list
+filled in alongside `protect_by_device`: when the per-strip map is missing or
+unparseable the controller falls back to it on purpose, so a typo there can never
+be the reason an outlet holding a server becomes switchable. This integration
+raises a repairs **error** if protection names a device id the controller has
+never seen.
+
+## Verified behaviour
+
+Exercised live on Home Assistant 2026.9.4 against the controller running with a
+protocol-level fake strip, capturing the exact bytes the strip received:
+
+| Check | Result |
+|---|---|
+| Controller reachable from HA, `/api/health` 200 | ✅ |
+| Config flow imports, validates, creates an entry | ✅ |
+| 42 entities created; real strip's entities added *dynamically* on connect | ✅ |
+| Simulator-only → all switches `unavailable`, `real_strip_connected` `off`, repairs issue raised | ✅ |
+| **ON physical socket 1** → strip received `up:onoff:2:on` (channel 2) | ✅ |
+| **ON physical socket 2** → strip received `up:onoff:3:on` (channel 3) | ✅ |
+| **OFF physical socket 2 (protected)** → refused; *no* bytes sent to the strip | ✅ |
+| **OFF physical socket 1** → strip received `up:onoff:2:off` | ✅ |
+| Channel 3 configured as protected surfaces as **socket 2** protected | ✅ |
+| Temperature, power, energy, state code flow through | ✅ |
+| Unanswerable voltage query → `unavailable`, not a fabricated `0` | ✅ |
+| `settled` absent during the post-restart window → treated as unavailable | ✅ |
+| Controller suites (`api`, `two_strip`, `probe`, `protect`) | 169 assertions ✅ |
+| Add-on wiring contract (`tests/test_addon_contract.py`) | 51 assertions ✅ |
+
+Run everything with `sh tests/run_all.sh` in the add-on repo — 220 assertions.
+
+**Not yet verified:** behaviour on real hardware, since no MTTL-W01 is attached
+yet. Provisioning, the TCP callback and the measured socket/channel mapping all
+come from the source project's history rather than from this integration's own
+testing.
+
+## Licence
+
+MIT for this integration. It contains **no vendor protocol code** — only an HTTP
+client for the controller's REST API. The protocol implementation, and the
+questions about redistributing a reverse-engineered protocol, live in the
+[add-on repository](https://github.com/Aabayoumy/moshtarak-wifi-addon); read its
+`NOTICE.md` before doing anything with it.
+
+TONLY, LG-U+ and MTTL-W01 are trademarks of their respective owners. This project
+is not affiliated with, endorsed by, or supported by them.
