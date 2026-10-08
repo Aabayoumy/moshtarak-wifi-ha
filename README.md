@@ -188,6 +188,26 @@ be the reason an outlet holding a server becomes switchable. This integration
 raises a repairs **error** if protection names a device id the controller has
 never seen.
 
+## Deleting a device
+
+Settings → Devices & Services → device → **Delete** works, under one rule: you
+can delete a device the controller is **no longer reporting**, and nothing
+else.
+
+The rule matters because Home Assistant deletes a device's entities along with
+the device. The strip that is answering right now refuses deletion — removing
+it would take its switches with it, and the next poll would recreate them, so
+the delete would appear to work and then undo itself. What does delete cleanly
+is a leftover: a strip that was unplugged and never came back, or the simulator
+from a setup where only it ran, together with all of its dark entities. And
+when there is no successful poll to compare against — the entry is setting up
+or in error — the answer is also no: nothing is deleted on the strength of
+missing data.
+
+The hook is `async_remove_config_entry_device` in `__init__.py`; the decision
+it makes is pure data in `device_removal.py`, covered by
+[`tests/test_device_removal.py`](tests/test_device_removal.py).
+
 ## Verified behaviour
 
 Exercised live on Home Assistant 2026.9.4 against the controller running with a

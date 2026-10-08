@@ -10,7 +10,7 @@
   "iot_class": "local_polling",
   "issue_tracker": "https://github.com/Aabayoumy/tonly-mttl-w01-ha/issues",
   "requirements": [],
-  "version": "1.0.0",
+  "version": "1.1.0",
   "after_dependencies": [
     "hassio"
   ]

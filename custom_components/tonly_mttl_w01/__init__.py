@@ -26,6 +26,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryNotReady
+from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
@@ -42,6 +43,7 @@ from .coordinator import (
     MttlW01StateCoordinator,
     validate_scan_interval,
 )
+from .device_removal import removal_allowed
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -131,6 +133,50 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         for issue_id in (ISSUE_NO_REAL_STRIP, ISSUE_PROTECTION_UNKNOWN):
             ir.async_delete_issue(hass, DOMAIN, issue_id)
     return unloaded
+
+
+async def async_remove_config_entry_device(
+    hass: HomeAssistant,
+    config_entry: ConfigEntry,
+    device_entry: dr.DeviceEntry,
+) -> bool:
+    """Decide whether the user may delete one of this entry's devices.
+
+    Home Assistant calls this from Settings -> Devices & Services -> device
+    -> Delete and refuses the deletion when it returns False. Deleting a
+    device there also deletes its entities, so allowing it for hardware that
+    is still reporting would remove working switches only to have the next
+    poll recreate them - a delete that appears to work and then undoes
+    itself.
+
+    The decision itself is pure data and lives in `device_removal.py`, where
+    it can be tested without Home Assistant installed. This function is only
+    the adapter: work out what the controller last reported, pick out the
+    identifiers that are ours, and ask. With no successful poll to compare
+    against there is nothing to trust, and the answer defaults to no - the
+    same reason `coordinator.py` refuses to treat a simulator's `reachable:
+    true` as evidence of real hardware.
+    """
+    runtime = getattr(config_entry, "runtime_data", None)
+    state = runtime.state if runtime is not None else None
+    known: list[str] | None = None
+    if state is not None and state.data:
+        known = state.known_strips
+
+    ours = [
+        str(identifier)
+        for domain, identifier in device_entry.identifiers
+        if domain == DOMAIN
+    ]
+    allowed = removal_allowed(known, ours)
+    if not allowed:
+        _LOGGER.debug(
+            "Refusing to remove device %s (%s); last known strips: %s",
+            device_entry.id,
+            ", ".join(ours) or "no identifiers of ours",
+            ", ".join(known) if known is not None else "no successful poll",
+        )
+    return allowed
 
 
 def _make_repair_listener(hass: HomeAssistant, entry: ConfigEntry):

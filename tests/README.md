@@ -13,6 +13,20 @@ of it, including the cases that cannot be got right by reading: forks and
 mirrors with different repository prefixes, near-miss slugs that must *not*
 match, dict-shaped add-ons, and every failure mode of the Supervisor lookup.
 
+## `test_device_removal.py` — no Home Assistant needed
+
+```
+python3 tests/test_device_removal.py
+```
+
+Pure stdlib. The Delete button on a device is gated by
+`async_remove_config_entry_device`, and this pins down both things that
+reading cannot guarantee: the decision itself (a device the controller still
+reports can never be deleted, a leftover can, and with no successful poll
+nothing is deleted at all), and the hook's exact name — Home Assistant finds
+it with `hasattr`, so a rename would not crash, it would silently turn the
+feature back off.
+
 ## `verify_live.py` — needs a running Home Assistant
 
 ```
