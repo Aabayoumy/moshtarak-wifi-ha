@@ -144,10 +144,10 @@ async def async_remove_config_entry_device(
 
     Home Assistant calls this from Settings -> Devices & Services -> device
     -> Delete and refuses the deletion when it returns False. Deleting a
-    device there also deletes its entities, so allowing it for hardware that
-    is still reporting would remove working switches only to have the next
-    poll recreate them - a delete that appears to work and then undoes
-    itself.
+    device there also deletes its entities, so allowing it for a strip the
+    controller still lists would remove working switches from Home Assistant
+    and then have the next reload build them all again - a delete that
+    appears to work and then undoes itself.
 
     The decision itself is pure data and lives in `device_removal.py`, where
     it can be tested without Home Assistant installed. This function is only

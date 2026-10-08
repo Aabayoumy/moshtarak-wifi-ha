@@ -11,14 +11,19 @@ The question is "does the controller still report this device id?", and the
 answers differ in a way that matters:
 
 * **It does** -> refuse. Home Assistant deletes a device's entities along
-  with the device, so deleting a live strip would take its working switches
-  with it - and the very next poll would recreate them, because the strip is
-  still there. The user would watch a delete appear to succeed and then undo
-  itself, which is worse than a delete that never worked.
-* **It does not** -> allow. That device is a leftover: a strip that was
-  unplugged and never came back, or the simulator from a setup where it was
-  the only thing running. Its entities are already dark, and the controller
-  will never report it again. This is exactly what the Delete button is for.
+  with the device, so deleting a strip the controller still lists would take
+  its working switches out of service at once - and because the strip is
+  still listed, the next reload or restart would build them all again and
+  undo the delete. A delete that appears to work and then reverses itself
+  is worse than a delete that never worked.
+* **It does not** -> allow. That device is a leftover the controller has
+  stopped listing: the simulator from a setup where it was the only thing
+  running, or a strip unplugged across an add-on restart - the controller
+  keeps its memory of strips in-process and lists everything that has ever
+  said hello until it restarts, so only then does a departed strip become
+  deletable. Its entities are already dark, and it will not be reported
+  again unless the strip itself returns. This is exactly what the Delete
+  button is for.
 * **Nobody can say** - no successful poll to compare against, because the
   entry is setting up or in error - -> refuse. Acting on missing data would
   be the same trap this project already refuses elsewhere: `coordinator.py`

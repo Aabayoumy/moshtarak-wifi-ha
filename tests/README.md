@@ -56,6 +56,14 @@ it locates automatically, and a long-lived HA token at
 It restores the add-on's own options on the way out, including protection, so a
 run that fails half way does not leave a locked outlet behind.
 
+One thing it cannot clean up: the fake strip's device, `MTTL-W01
+2CFDB3355BA3`. The controller lists every strip that has said hello until the
+add-on restarts, so the integration correctly refuses to delete that device
+while the add-on remembers it — restart the add-on (the real strip redials by
+itself) and Delete works. Delete it **enabled**: a device deleted disabled is
+resurrected with that state on the next run, and the run then fails with its
+entities dark.
+
 ### What it deliberately does not do
 
 It never asserts a power, energy or current *value*. Those readings are only as

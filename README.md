@@ -195,14 +195,24 @@ can delete a device the controller is **no longer reporting**, and nothing
 else.
 
 The rule matters because Home Assistant deletes a device's entities along with
-the device. The strip that is answering right now refuses deletion — removing
-it would take its switches with it, and the next poll would recreate them, so
-the delete would appear to work and then undo itself. What does delete cleanly
-is a leftover: a strip that was unplugged and never came back, or the simulator
-from a setup where only it ran, together with all of its dark entities. And
-when there is no successful poll to compare against — the entry is setting up
-or in error — the answer is also no: nothing is deleted on the strength of
-missing data.
+the device. A strip the controller still lists refuses deletion — even one that
+has been unplugged: removing it would take its switches out of service, and the
+next reload or restart would build them all again from the strip the controller
+still lists, undoing the delete. What does delete cleanly is a leftover the
+controller has stopped listing: the simulator once a real strip is answering,
+or a strip unplugged across an add-on restart — the controller keeps its memory
+of strips in-process and lists everything that has ever said hello until it
+restarts, and only then does a departed strip become deletable, together with
+all of its dark entities. And when there is no successful poll to compare
+against — the entry is setting up or in error — the answer is also no: nothing
+is deleted on the strength of missing data.
+
+Two quirks of that rule, both from the controller rather than this
+integration: an add-on restart opens a one-poll window in which auto mode
+still reports the simulator before your strip redials, so a deleted simulator
+device can reappear after a restart — delete it again once the strip is back;
+and a restart of Home Assistant itself will rebuild any device the controller
+still lists, which is exactly what the refusal protects against.
 
 The hook is `async_remove_config_entry_device` in `__init__.py`; the decision
 it makes is pure data in `device_removal.py`, covered by
@@ -210,8 +220,9 @@ it makes is pure data in `device_removal.py`, covered by
 
 ## Verified behaviour
 
-Exercised live on Home Assistant 2026.9.4 against the controller running with a
-protocol-level fake strip, capturing the exact bytes the strip received:
+Exercised live on Home Assistant 2026.9.4 and 2026.10.0 against the controller
+running with a protocol-level fake strip, capturing the exact bytes the strip
+received:
 
 | Check | Result |
 |---|---|
