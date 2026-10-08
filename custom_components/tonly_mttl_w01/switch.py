@@ -230,20 +230,27 @@ class MttlW01Switch(CoordinatorEntity[MttlW01StateCoordinator], SwitchEntity):
         # 1-2s and the physical relay can take up to 20s to close, so an
         # immediate optimistic read would claim power that has not arrived.
         #
-        # One refresh is not enough, though: the controller force-reads state
+        # A refresh right now would also lie: the controller force-reads state
         # immediately after sending the command, *before* the strip's echo
         # lands, and serves that stale reading from its poll-window cache for
-        # the next couple of seconds. Refreshing again ~2.5s later reads the
-        # true echo once the cache has expired, so the UI shows the new state
-        # after a couple of seconds rather than on the next scheduled poll.
-        await self.coordinator.async_request_refresh()
+        # the next couple of seconds. So the service call returns immediately
+        # and a background task re-reads ~2.5s later, once the cache has
+        # expired, so the UI shows the strip's own answer after a couple of
+        # seconds instead of on the next scheduled poll.
         self.hass.async_create_task(self._async_refresh_after_echo())
 
     async def _async_refresh_after_echo(self) -> None:
-        """Re-read after the strip's echo has landed and the cache expired."""
+        """Re-read after the strip's echo has landed and the cache expired.
+
+        This must be `async_refresh`, not `async_request_refresh`: the latter
+        is debounced by the coordinator (a 10s cooldown window in current Home
+        Assistant), so a request two seconds after a command would be batched
+        and swallowed. `async_refresh` runs now, and the controller's poll
+        cache has expired by then, so it reads the strip's own answer.
+        """
         try:
             await asyncio.sleep(2.5)
-            await self.coordinator.async_request_refresh()
+            await self.coordinator.async_refresh()
         except asyncio.CancelledError:
             # Unload during the wait: nothing to refresh, nothing to clean up.
             return
