@@ -108,7 +108,7 @@ SOCKET_TO_CHANNEL = {1: 2, 2: 3, 3: 4, 4: 1}
 # The add-on's declared options, restored at the end of the run.
 DEFAULT_ADDON_OPTIONS = {
     "mode": "auto",
-    "poll": 5,
+    "poll": 2,
     "protect": "",
     "protect_by_device": "",
     "history_interval": 20,
