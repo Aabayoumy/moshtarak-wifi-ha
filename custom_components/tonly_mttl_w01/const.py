@@ -31,9 +31,10 @@ DOMAIN: Final = "tonly_mttl_w01"
 # the repository URL, so every fork and mirror gets a different container name.
 # See host_discovery.py, which asks the Supervisor at runtime instead.
 
-# The controller caches reads for MOSHTARAK_WIFI_POLL seconds (5 by default), so
-# polling faster than this gains nothing but load. 5s also keeps a switch reading
-# close to the controller's own relay echo time of 1-2s.
+# The controller caches reads for MOSHTARAK_WIFI_POLL seconds (2 in the
+# add-on's shipped options), so polling faster than this gains nothing but
+# load. 5s also keeps a switch reading close to the controller's own relay
+# echo time of 1-2s.
 DEFAULT_SCAN_INTERVAL: Final = timedelta(seconds=5)
 MIN_SCAN_INTERVAL: Final = timedelta(seconds=5)
 MAX_SCAN_INTERVAL: Final = timedelta(seconds=300)
