@@ -1,4 +1,4 @@
-"""Binary sensors for Moshtarak WiFi.
+"""Binary sensors for MTTL-W01 WiFi.
 
 The important one is `Real strip connected`. It exists because of a specific,
 measured trap: with no hardware attached, the controller answers `/api/state`
@@ -29,11 +29,11 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import DOMAIN, SOCKET_COUNT
-from .coordinator import MoshtarakStateCoordinator
+from .coordinator import MttlW01StateCoordinator
 
 
 @dataclass(frozen=True, kw_only=True)
-class MoshtarakBinarySensorDescription(BinarySensorEntityDescription):
+class MttlW01BinarySensorDescription(BinarySensorEntityDescription):
     """A binary sensor plus where its value comes from."""
 
     value: Callable[[Any], bool]
@@ -47,7 +47,7 @@ async def async_setup_entry(
 ) -> None:
     """Set up binary sensors for every known strip."""
     runtime = entry.runtime_data
-    coordinator: MoshtarakStateCoordinator = runtime.state
+    coordinator: MttlW01StateCoordinator = runtime.state
     created: set[str] = set()
 
     async def _add(devids: list[str]) -> None:
@@ -55,17 +55,17 @@ async def async_setup_entry(
         if not fresh:
             return
         created.update(fresh)
-        entities: list[MoshtarakBinarySensor] = []
+        entities: list[MttlW01BinarySensor] = []
         for devid in fresh:
             entities.append(
-                MoshtarakBinarySensor(coordinator, devid, REAL_STRIP)
+                MttlW01BinarySensor(coordinator, devid, REAL_STRIP)
             )
             for number in range(1, SOCKET_COUNT + 1):
                 entities.append(
-                    MoshtarakBinarySensor(coordinator, devid, DRAWS_CURRENT, number)
+                    MttlW01BinarySensor(coordinator, devid, DRAWS_CURRENT, number)
                 )
                 entities.append(
-                    MoshtarakBinarySensor(coordinator, devid, PROTECTED_OUTLET, number)
+                    MttlW01BinarySensor(coordinator, devid, PROTECTED_OUTLET, number)
                 )
         async_add_entities(entities)
 
@@ -73,8 +73,8 @@ async def async_setup_entry(
     await _add(coordinator.known_strips)
 
 
-class MoshtarakBinarySensor(
-    CoordinatorEntity[MoshtarakStateCoordinator], BinarySensorEntity
+class MttlW01BinarySensor(
+    CoordinatorEntity[MttlW01StateCoordinator], BinarySensorEntity
 ):
     """One binary reading about a strip or one of its outlets."""
 
@@ -82,9 +82,9 @@ class MoshtarakBinarySensor(
 
     def __init__(
         self,
-        coordinator: MoshtarakStateCoordinator,
+        coordinator: MttlW01StateCoordinator,
         devid: str,
-        description: MoshtarakBinarySensorDescription,
+        description: MttlW01BinarySensorDescription,
         number: int | None = None,
     ) -> None:
         super().__init__(coordinator)
@@ -100,6 +100,7 @@ class MoshtarakBinarySensor(
             "model": str(doc.get("model") or "MTTL-W01"),
             "name": ("MTTL-W01 (simulator)" if simulated
                      else f"MTTL-W01 {devid}"),
+            "sw_version": str(doc.get("firmware") or ""),
         }
 
         if number is None:
@@ -147,7 +148,7 @@ class MoshtarakBinarySensor(
 
 
 #: Is a real (non-simulated) strip connected at all?
-REAL_STRIP = MoshtarakBinarySensorDescription(
+REAL_STRIP = MttlW01BinarySensorDescription(
     key="real_strip",
     translation_key="real_strip_connected",
     device_class=BinarySensorDeviceClass.CONNECTIVITY,
@@ -156,7 +157,7 @@ REAL_STRIP = MoshtarakBinarySensorDescription(
 )
 
 #: Something is drawing power through this outlet.
-DRAWS_CURRENT = MoshtarakBinarySensorDescription(
+DRAWS_CURRENT = MttlW01BinarySensorDescription(
     key="draws_current",
     translation_key="socket_draws_current",
     device_class=BinarySensorDeviceClass.POWER,
@@ -165,7 +166,7 @@ DRAWS_CURRENT = MoshtarakBinarySensorDescription(
 )
 
 #: This outlet refuses to be switched off.
-PROTECTED_OUTLET = MoshtarakBinarySensorDescription(
+PROTECTED_OUTLET = MttlW01BinarySensorDescription(
     key="protected",
     translation_key="socket_protected",
     device_class=None,
@@ -175,4 +176,4 @@ PROTECTED_OUTLET = MoshtarakBinarySensorDescription(
 )
 
 
-__all__ = ["MoshtarakBinarySensor", "async_setup_entry"]
+__all__ = ["MttlW01BinarySensor", "async_setup_entry"]

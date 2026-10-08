@@ -1,4 +1,4 @@
-"""Diagnostics support for Moshtarak WiFi.
+"""Diagnostics support for MTTL-W01 WiFi.
 
 Everything here is read-only. It reports what the controller says about itself,
 plus the raw per-strip state, so a bug report can be answered without asking
@@ -18,7 +18,7 @@ from homeassistant.components.diagnostics import async_redact_data
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 
-from .api import MoshtarakApiError
+from .api import MttlW01ApiError
 
 
 async def async_get_config_entry_diagnostics(
@@ -60,7 +60,7 @@ async def async_get_config_entry_diagnostics(
     ):
         try:
             out["controller"][label] = await coro
-        except MoshtarakApiError as err:
+        except MttlW01ApiError as err:
             out["controller"][label] = {"error": str(err)}
 
     for devid in state.known_strips:

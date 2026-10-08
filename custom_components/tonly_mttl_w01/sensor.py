@@ -1,4 +1,4 @@
-"""Sensor platform for Moshtarak WiFi.
+"""Sensor platform for MTTL-W01 WiFi.
 
 Three of the readings here are deliberately NOT what a naive integration would
 create, and each omission is a decision rather than an oversight:
@@ -54,11 +54,11 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import DOMAIN, SOCKET_COUNT
-from .coordinator import MoshtarakProbeCoordinator, MoshtarakStateCoordinator
+from .coordinator import MttlW01ProbeCoordinator, MttlW01StateCoordinator
 
 
 @dataclass(frozen=True, kw_only=True)
-class MoshtarakSensorDescription(SensorEntityDescription):
+class MttlW01SensorDescription(SensorEntityDescription):
     """A sensor plus where its value comes from."""
 
     value: Callable[[dict[str, Any]], Any]
@@ -67,8 +67,8 @@ class MoshtarakSensorDescription(SensorEntityDescription):
 
 # -- per outlet ----------------------------------------------------------------
 
-SOCKET_SENSORS: tuple[MoshtarakSensorDescription, ...] = (
-    MoshtarakSensorDescription(
+SOCKET_SENSORS: tuple[MttlW01SensorDescription, ...] = (
+    MttlW01SensorDescription(
         key="power_w",
         translation_key="socket_power_unverified",
         device_class=None,  # deliberately absent - see module docstring
@@ -78,7 +78,7 @@ SOCKET_SENSORS: tuple[MoshtarakSensorDescription, ...] = (
         value=lambda s: s.get("power_w"),
         socket=True,
     ),
-    MoshtarakSensorDescription(
+    MttlW01SensorDescription(
         key="power_raw",
         translation_key="socket_power_raw",
         device_class=None,
@@ -87,7 +87,7 @@ SOCKET_SENSORS: tuple[MoshtarakSensorDescription, ...] = (
         value=lambda s: s.get("power_raw"),
         socket=True,
     ),
-    MoshtarakSensorDescription(
+    MttlW01SensorDescription(
         key="energy_kwh",
         translation_key="socket_energy_unverified",
         device_class=None,  # deliberately absent - see module docstring
@@ -97,7 +97,7 @@ SOCKET_SENSORS: tuple[MoshtarakSensorDescription, ...] = (
         value=lambda s: s.get("energy_kwh"),
         socket=True,
     ),
-    MoshtarakSensorDescription(
+    MttlW01SensorDescription(
         key="temp_c",
         translation_key="socket_temperature",
         # Temperature really is what field 11 holds, so this one is honest.
@@ -107,7 +107,7 @@ SOCKET_SENSORS: tuple[MoshtarakSensorDescription, ...] = (
         value=lambda s: s.get("temp_c"),
         socket=True,
     ),
-    MoshtarakSensorDescription(
+    MttlW01SensorDescription(
         key="state_code",
         translation_key="socket_state_code",
         device_class=None,
@@ -120,8 +120,8 @@ SOCKET_SENSORS: tuple[MoshtarakSensorDescription, ...] = (
 
 # -- per strip -----------------------------------------------------------------
 
-PROBE_SENSORS: tuple[MoshtarakSensorDescription, ...] = (
-    MoshtarakSensorDescription(
+PROBE_SENSORS: tuple[MttlW01SensorDescription, ...] = (
+    MttlW01SensorDescription(
         key="voltage",
         translation_key="mains_voltage",
         device_class=SensorDeviceClass.VOLTAGE,
@@ -130,7 +130,7 @@ PROBE_SENSORS: tuple[MoshtarakSensorDescription, ...] = (
         suggested_display_precision=1,
         value=lambda p: p.get("voltage_v"),
     ),
-    MoshtarakSensorDescription(
+    MttlW01SensorDescription(
         key="rssi",
         translation_key="signal_strength",
         device_class=SensorDeviceClass.SIGNAL_STRENGTH,
@@ -149,8 +149,8 @@ async def async_setup_entry(
 ) -> None:
     """Set up sensors for every known strip."""
     runtime = entry.runtime_data
-    state: MoshtarakStateCoordinator = runtime.state
-    probe: MoshtarakProbeCoordinator = runtime.probe
+    state: MttlW01StateCoordinator = runtime.state
+    probe: MttlW01ProbeCoordinator = runtime.probe
     created: set[str] = set()
 
     async def _add(devids: list[str]) -> None:
@@ -158,14 +158,14 @@ async def async_setup_entry(
         if not fresh:
             return
         created.update(fresh)
-        entities: list[MoshtarakSensor] = []
+        entities: list[MttlW01Sensor] = []
         for devid in fresh:
             for description in PROBE_SENSORS:
-                entities.append(MoshtarakSensor(state, probe, devid, description))
+                entities.append(MttlW01Sensor(state, probe, devid, description))
             for number in range(1, SOCKET_COUNT + 1):
                 for description in SOCKET_SENSORS:
                     entities.append(
-                        MoshtarakSensor(state, probe, devid, description, number)
+                        MttlW01Sensor(state, probe, devid, description, number)
                     )
         async_add_entities(entities)
 
@@ -173,17 +173,17 @@ async def async_setup_entry(
     await _add(state.known_strips)
 
 
-class MoshtarakSensor(CoordinatorEntity[MoshtarakStateCoordinator], SensorEntity):
+class MttlW01Sensor(CoordinatorEntity[MttlW01StateCoordinator], SensorEntity):
     """One reading, from either the status block or the measurement query."""
 
     _attr_has_entity_name = True
 
     def __init__(
         self,
-        state: MoshtarakStateCoordinator,
-        probe: MoshtarakProbeCoordinator,
+        state: MttlW01StateCoordinator,
+        probe: MttlW01ProbeCoordinator,
         devid: str,
-        description: MoshtarakSensorDescription,
+        description: MttlW01SensorDescription,
         number: int | None = None,
     ) -> None:
         super().__init__(state)
@@ -200,6 +200,7 @@ class MoshtarakSensor(CoordinatorEntity[MoshtarakStateCoordinator], SensorEntity
             "model": str(doc.get("model") or "MTTL-W01"),
             "name": ("MTTL-W01 (simulator)" if simulated
                      else f"MTTL-W01 {devid}"),
+            "sw_version": str(doc.get("firmware") or ""),
         }
 
         if number is None:
@@ -274,4 +275,4 @@ class MoshtarakSensor(CoordinatorEntity[MoshtarakStateCoordinator], SensorEntity
         return attrs
 
 
-__all__ = ["MoshtarakSensor", "async_setup_entry"]
+__all__ = ["MttlW01Sensor", "async_setup_entry"]

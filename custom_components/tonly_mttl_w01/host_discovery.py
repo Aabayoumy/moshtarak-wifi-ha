@@ -1,18 +1,18 @@
-"""Work out where the Moshtarak WiFi controller is listening.
+"""Work out where the MTTL-W01 WiFi controller is listening.
 
 Why this module exists at all
 -----------------------------
 
 The obvious thing to do is hardcode the add-on's container name:
 
-    http://a0d7b954_moshtarak_wifi:8099
+    http://a0d7b954_tonly_mttl_w01:8099
 
 That was the first implementation here, and it is wrong twice over.
 
 1. The name is wrong. An add-on's slug is ``<repository slug>_<add-on slug>``.
    This add-on lives in a third-party repository, and the Supervisor derives
    the repository slug from a hash of the repository URL. So the real name is
-   ``3f742121_moshtarak_wifi``, not ``a0d7b954_...`` - the prefix was guessed
+   ``3f742121_tonly_mttl_w01``, not ``a0d7b954_...`` - the prefix was guessed
    from a different repository and would never have resolved.
 
 2. More importantly, the name is not knowable in advance. Any user who adds the
@@ -29,12 +29,12 @@ drift from what the Supervisor actually launched.
 A note on the `_` vs `-` forms
 ------------------------------
 
-Both ``3f742121_moshtarak_wifi`` and ``3f742121-moshtarak-wifi`` exist in this
+Both ``3f742121_tonly_mttl_w01`` and ``3f742121-tonly-mttl-w01`` exist in this
 system, and only one of them resolves to the controller:
 
-    3f742121_moshtarak_wifi     HTTP 000   (does not resolve)
-    3f742121-moshtarak-wifi     HTTP 200   (resolves - the docker hostname)
-    app_3f742121_moshtarak_wifi HTTP 200   (resolves - the container name)
+    3f742121_tonly_mttl_w01     HTTP 000   (does not resolve)
+    3f742121-tonly-mttl-w01     HTTP 200   (resolves - the docker hostname)
+    app_3f742121_tonly_mttl_w01 HTTP 200   (resolves - the container name)
 
 Docker does not accept underscores in a network alias, which is why the dash
 form is the one that works. Home Assistant's own
@@ -60,7 +60,7 @@ _LOGGER = logging.getLogger(__name__)
 # this with a repository-derived slug, so the installed slug always *ends* with
 # this, never equals it (unless the add-on is someday shipped in the default
 # repository, in which case equality also holds).
-ADDON_SLUG: Final = "moshtarak_wifi"
+ADDON_SLUG: Final = "tonly_mttl_w01"
 
 # The port the controller's HTTP API listens on. Deliberately NOT published to
 # the LAN - the controller API is unauthenticated - so this address is only
@@ -96,7 +96,7 @@ def _addon_slug(addon: object) -> str:
 
 
 async def async_find_addon_host(hass: HomeAssistant) -> str | None:
-    """Return the hostname of the installed Moshtarak WiFi add-on, if any.
+    """Return the hostname of the installed MTTL-W01 WiFi add-on, if any.
 
     Returns None - never raises - when the Supervisor is unavailable, the
     add-on is not installed, or the add-on listing cannot be read. Every one of
@@ -136,7 +136,7 @@ async def async_find_addon_host(hass: HomeAssistant) -> str | None:
         url = getattr(addon, "url", None)
         if isinstance(addon, dict):
             url = addon.get("url")
-        if url and "moshtarak-wifi-addon" in str(url):
+        if url and "tonly-mttl-w01-addon" in str(url):
             slug = _addon_slug(addon)
             if slug:
                 return _slug_to_hostname(slug)

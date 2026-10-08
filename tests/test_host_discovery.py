@@ -25,7 +25,7 @@ from pathlib import Path
 
 # Load host_discovery.py directly rather than importing the package.
 #
-# Importing moshtarak_wifi would pull in __init__.py, which imports
+# Importing tonly_mttl_w01 would pull in __init__.py, which imports
 # homeassistant.config_entries and a good deal else - none of which is installed
 # on a dev machine, and none of which has anything to do with the slug matching
 # under test. Importing the single file by path keeps this test to the stdlib.
@@ -34,7 +34,7 @@ import importlib.util  # noqa: E402
 
 _MODULE_PATH = (
     Path(__file__).resolve().parent.parent
-    / "custom_components/moshtarak_wifi/host_discovery.py"
+    / "custom_components/tonly_mttl_w01/host_discovery.py"
 )
 
 # The one symbol host_discovery needs from Core is used in a type annotation,
@@ -49,7 +49,7 @@ if "homeassistant" not in sys.modules:
     sys.modules["homeassistant"] = ha
     sys.modules["homeassistant.core"] = core
 
-_spec = importlib.util.spec_from_file_location("_moshtarak_host_discovery", _MODULE_PATH)
+_spec = importlib.util.spec_from_file_location("_tonly_host_discovery", _MODULE_PATH)
 assert _spec and _spec.loader
 hd = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(hd)
@@ -138,12 +138,12 @@ def install_hassio(addons, error=None, available=True, client_raises=None):
 def main() -> int:
     print("1. the real slug found on this system")
     # Measured, not assumed: the add-on installed from
-    # https://github.com/Aabayoumy/moshtarak-wifi-addon has this slug.
-    real = "3f742121_moshtarak_wifi"
+    # https://github.com/Aabayoumy/tonly-mttl-w01-addon has this slug.
+    real = "3f742121_tonly_mttl_w01"
     install_hassio([FakeAddon(real)])
     host = asyncio.run(hd.async_find_addon_host(fake_hass()))
     check(
-        host == "3f742121-moshtarak-wifi",
+        host == "3f742121-tonly-mttl-w01",
         "resolves the installed add-on to its dash-form hostname",
         f"got {host!r}",
     )
@@ -152,7 +152,7 @@ def main() -> int:
     # The point of this whole module. The old default was a0d7b954_..., which
     # was never this system's slug and would never have connected.
     check(
-        hd._slug_to_hostname("a0d7b954_moshtarak_wifi") == "a0d7b954-moshtarak-wifi",
+        hd._slug_to_hostname("a0d7b954_tonly_mttl_w01") == "a0d7b954-tonly-mttl-w01",
         "underscore form converts to the dash form docker accepts",
     )
     check(
@@ -168,16 +168,16 @@ def main() -> int:
     # executed - a mutation that replaced `slug.replace("_", "-")` with `slug`
     # passed the suite unnoticed. That is exactly what this case is for.
     check(
-        hd._slug_to_hostname("3f742121_moshtarak_wifi") == "3f742121-moshtarak-wifi",
+        hd._slug_to_hostname("3f742121_tonly_mttl_w01") == "3f742121-tonly-mttl-w01",
         "Core's helper is used when it exists",
     )
     module = sys.modules.get("homeassistant.components.hassio")
     saved = module.hostname_from_addon_slug
     del module.hostname_from_addon_slug
     try:
-        got = hd._slug_to_hostname("3f742121_moshtarak_wifi")
+        got = hd._slug_to_hostname("3f742121_tonly_mttl_w01")
         check(
-            got == "3f742121-moshtarak-wifi",
+            got == "3f742121-tonly-mttl-w01",
             "substitutes the dash form itself when Core's helper is gone",
             f"got {got!r}",
         )
@@ -186,10 +186,10 @@ def main() -> int:
 
     print("\n3. forks and mirrors get different slugs, and all of them work")
     for slug in (
-        "3f742121_moshtarak_wifi",
-        "abcdef12_moshtarak_wifi",
-        "99999999_moshtarak_wifi",
-        "deadbeefcafe_moshtarak_wifi",
+        "3f742121_tonly_mttl_w01",
+        "abcdef12_tonly_mttl_w01",
+        "99999999_tonly_mttl_w01",
+        "deadbeefcafe_tonly_mttl_w01",
     ):
         install_hassio([FakeAddon(slug)])
         got = asyncio.run(hd.async_find_addon_host(fake_hass()))
@@ -197,29 +197,29 @@ def main() -> int:
         check(got == want, f"{slug} -> {want}", f"got {got!r}")
 
     print("\n4. matching rules")
-    install_hassio([FakeAddon("3f742121_moshtarak_wifi"), FakeAddon("core_ssh")])
+    install_hassio([FakeAddon("3f742121_tonly_mttl_w01"), FakeAddon("core_ssh")])
     got = asyncio.run(hd.async_find_addon_host(fake_hass()))
-    check(got == "3f742121-moshtarak-wifi", "picks ours out of several add-ons", f"got {got!r}")
+    check(got == "3f742121-tonly-mttl-w01", "picks ours out of several add-ons", f"got {got!r}")
 
     # An add-on installed from the default repository would have no prefix.
-    install_hassio([FakeAddon("moshtarak_wifi")])
+    install_hassio([FakeAddon("tonly_mttl_w01")])
     got = asyncio.run(hd.async_find_addon_host(fake_hass()))
-    check(got == "moshtarak-wifi", "handles a bare, unprefixed slug", f"got {got!r}")
+    check(got == "tonly-mttl-w01", "handles a bare, unprefixed slug", f"got {got!r}")
 
     # Must not match a different add-on that merely shares a prefix or suffix
-    # character. "my_moshtarak_wifi_helper" must not match.
-    install_hassio([FakeAddon("my_moshtarak_wifi_helper")])
+    # character. "my_tonly_mttl_w01_helper" must not match.
+    install_hassio([FakeAddon("my_tonly_mttl_w01_helper")])
     got = asyncio.run(hd.async_find_addon_host(fake_hass()))
     check(got is None, "does not match a longer unrelated slug", f"got {got!r}")
 
-    install_hassio([FakeAddon("moshtarak_wifi_extras")])
+    install_hassio([FakeAddon("tonly_mttl_w01_extras")])
     got = asyncio.run(hd.async_find_addon_host(fake_hass()))
     check(got is None, "does not match a different add-on with a similar name", f"got {got!r}")
 
     print("\n5. fallback to the add-on URL when the slug does not look like ours")
     install_hassio(
         [
-            FakeAddon("zzzz1111_somethingelse", url="https://github.com/Aabayoumy/moshtarak-wifi-addon"),
+            FakeAddon("zzzz1111_somethingelse", url="https://github.com/Aabayoumy/tonly-mttl-w01-addon"),
         ]
     )
     got = asyncio.run(hd.async_find_addon_host(fake_hass()))
@@ -230,9 +230,9 @@ def main() -> int:
     )
 
     print("\n6. dict-shaped add-ons are tolerated")
-    install_hassio([{"slug": "3f742121_moshtarak_wifi", "url": ""}])
+    install_hassio([{"slug": "3f742121_tonly_mttl_w01", "url": ""}])
     got = asyncio.run(hd.async_find_addon_host(fake_hass()))
-    check(got == "3f742121-moshtarak-wifi", "reads slug out of a plain dict", f"got {got!r}")
+    check(got == "3f742121-tonly-mttl-w01", "reads slug out of a plain dict", f"got {got!r}")
 
     print("\n7. absent add-on is not an error")
     install_hassio([FakeAddon("core_ssh"), FakeAddon("core_mosquitto")])
@@ -241,12 +241,12 @@ def main() -> int:
 
     print("\n8. every failure mode degrades to 'ask the user', never raises")
 
-    install_hassio([FakeAddon("3f742121_moshtarak_wifi")], error=RuntimeError("boom"))
+    install_hassio([FakeAddon("3f742121_tonly_mttl_w01")], error=RuntimeError("boom"))
     got = asyncio.run(hd.async_find_addon_host(fake_hass()))
     check(got is None, "survives the Supervisor being unreachable", f"got {got!r}")
 
     # KeyError is what Core raises when hassio has not finished setting up.
-    install_hassio([FakeAddon("3f742121_moshtarak_wifi")], client_raises=KeyError("data"))
+    install_hassio([FakeAddon("3f742121_tonly_mttl_w01")], client_raises=KeyError("data"))
     got = asyncio.run(hd.async_find_addon_host(fake_hass()))
     check(got is None, "survives hassio not being set up yet", f"got {got!r}")
 
@@ -255,13 +255,13 @@ def main() -> int:
     got = asyncio.run(hd.async_find_addon_host(fake_hass()))
     check(got is None, "survives hassio not existing (Core-only install)", f"got {got!r}")
 
-    install_hassio([FakeAddon("3f742121_moshtarak_wifi")])
+    install_hassio([FakeAddon("3f742121_tonly_mttl_w01")])
 
     print("\n9. candidate list ordering and content")
-    install_hassio([FakeAddon("3f742121_moshtarak_wifi")])
+    install_hassio([FakeAddon("3f742121_tonly_mttl_w01")])
     hosts = asyncio.run(hd.async_candidate_hosts(fake_hass()))
     check(
-        hosts == ["http://3f742121-moshtarak-wifi:8099", "http://localhost:8099"],
+        hosts == ["http://3f742121-tonly-mttl-w01:8099", "http://localhost:8099"],
         "add-on host is tried first, localhost second",
         f"got {hosts!r}",
     )

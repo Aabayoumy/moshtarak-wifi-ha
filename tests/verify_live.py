@@ -79,7 +79,7 @@ def _locate_fake_strip() -> Path:
         HERE.parent / "tests" / "fake_strip.py",                  # this repo's tests/
         HERE.parent / "addon" / "tests" / "fake_strip.py",       # inside the add-on repo
         HERE.parent.parent / "addon" / "tests" / "fake_strip.py",  # sibling repo, monorepo layout
-        HERE.parent.parent / "moshtarak-wifi-addon" / "tests" / "fake_strip.py",
+        HERE.parent.parent / "tonly-mttl-w01-addon" / "tests" / "fake_strip.py",
     ]
     for path in candidates:
         if path.is_file():
@@ -88,7 +88,7 @@ def _locate_fake_strip() -> Path:
     raise SystemExit(
         "Could not find fake_strip.py.\n\n"
         "It lives in the add-on repository:\n"
-        "  https://github.com/Aabayoumy/moshtarak-wifi-addon\n\n"
+        "  https://github.com/Aabayoumy/tonly-mttl-w01-addon\n\n"
         "Clone it next to this repository, or pass its path explicitly.\n"
         "Looked in:\n"
         + "\n".join(f"  {p}" for p in candidates)
@@ -238,7 +238,7 @@ def addon_hostname(slug: str) -> str:
     return slug.replace("_", "-")
 
 
-def discover_addon_slug(prefix_guess: str = "moshtarak_wifi") -> str | None:
+def discover_addon_slug(prefix_guess: str = "tonly_mttl_w01") -> str | None:
     """Find the installed add-on's slug, asking the Supervisor.
 
     GET /addons answers ``{"addons": [...]}``, not a bare list. An earlier
@@ -408,14 +408,14 @@ def main() -> int:
     token = Path(args.token_file).read_text().strip().splitlines()[0]
     ha = HA(args.ha, token)
 
-    print("Verifying the installed Moshtarak WiFi add-on, with no hardware.")
+    print("Verifying the installed MTTL-W01 WiFi add-on, with no hardware.")
     print(f"  Home Assistant : {args.ha}")
     print(f"  fake strip     : {FAKE_STRIP}")
 
     # -- 1. prerequisites ------------------------------------------------
     ck.section("1. the integration is set up")
 
-    entries = ha.entries("moshtarak_wifi")
+    entries = ha.entries("tonly_mttl_w01")
     if not ck.check(bool(entries), "integration has a config entry",
                     "add it via Settings -> Devices & Services"):
         return ck.report()

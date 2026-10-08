@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate the brand assets for the Moshtarak WiFi integration.
+"""Generate the brand assets for the MTTL-W01 WiFi integration.
 
 Hand-built, nothing scraped. Writes real PNGs using only zlib and struct, so it
 runs anywhere Python does and needs no image library.

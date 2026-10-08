@@ -2,12 +2,12 @@
   "config": {
     "step": {
       "user": {
-        "title": "Moshtarak WiFi (TONLY MTTL-W01)",
-        "description": "Where is the Moshtarak WiFi controller?\n\nIf you installed the Moshtarak WiFi app/add-on, leave this as the suggested address - it is read from the Supervisor rather than guessed. The strip itself is not configured here: the controller is the thing that talks to it.\n\nThe address is not your Home Assistant's own address unless the controller is running on the same host."
+        "title": "TONLY MTTL-W01 WiFi",
+        "description": "Where is the MTTL-W01 WiFi controller?\n\nIf you installed the MTTL-W01 WiFi app/add-on, leave this as the suggested address - it is read from the Supervisor rather than guessed. The strip itself is not configured here: the controller is the thing that talks to it.\n\nThe address is not your Home Assistant's own address unless the controller is running on the same host."
       }
     },
     "error": {
-      "cannot_connect": "No Moshtarak WiFi controller answered at that address. Check the app/add-on is running and that the address and port are right."
+      "cannot_connect": "No MTTL-W01 WiFi controller answered at that address. Check the app/add-on is running and that the address and port are right."
     },
     "abort": {
       "already_configured": "This controller is already configured."
@@ -16,7 +16,7 @@
   "options": {
     "step": {
       "init": {
-        "title": "Moshtarak WiFi options",
+        "title": "TONLY MTTL-W01 WiFi options",
         "description": "The controller caches its own readings, so polling faster than this gains nothing. Relay state echoes within 1-2 seconds, but the physical relay can take up to 20 seconds to close - so this is not a guarantee that power has arrived."
       }
     }
@@ -60,7 +60,7 @@
   "issues": {
     "no_real_strip": {
       "title": "No real MTTL-W01 strip is connected",
-      "description": "The Moshtarak WiFi controller at {host} is answering, but only its built-in simulator is ({known}).\n\nSimulator readings look exactly like real ones - four healthy sockets, reachable, settled - so the outlets are not being shown rather than being shown as fake. Switches will go unavailable until a real strip connects.\n\nIf you have a strip, provision it to call back to Home Assistant's LAN address and check that port 10086 is not blocked."
+      "description": "The MTTL-W01 WiFi controller at {host} is answering, but only its built-in simulator is ({known}).\n\nSimulator readings look exactly like real ones - four healthy sockets, reachable, settled - so the outlets are not being shown rather than being shown as fake. Switches will go unavailable until a real strip connects.\n\nIf you have a strip, provision it to call back to Home Assistant's LAN address and check that port 10086 is not blocked."
     },
     "protection_unknown": {
       "title": "Protection is configured for an unknown strip",

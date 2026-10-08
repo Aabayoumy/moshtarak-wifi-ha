@@ -1,10 +1,10 @@
-# Moshtarak WiFi — Home Assistant integration
+# MTTL-W01 WiFi — Home Assistant integration
 
 Controls a **TONLY / LG-U+ MTTL-W01** four-socket Wi-Fi power strip in Home
 Assistant.
 
 [![HACS Custom](https://img.shields.io/badge/HACS-Custom-41BDF5.svg)](https://hacs.xyz)
-[![GitHub release](https://img.shields.io/github/release/Aabayoumy/moshtarak-wifi-ha.svg)](https://github.com/Aabayoumy/moshtarak-wifi-ha/releases)
+[![GitHub release](https://img.shields.io/github/release/Aabayoumy/tonly-mttl-w01-ha.svg)](https://github.com/Aabayoumy/tonly-mttl-w01-ha/releases)
 
 ---
 
@@ -32,8 +32,8 @@ So you need both:
 
 | Part | Where | What it is |
 |---|---|---|
-| `moshtarak-wifi-addon` | Home Assistant app/add-on | The controller. Speaks the vendor protocol. |
-| `moshtarak-wifi-ha` | **this repo**, via HACS | The integration. Creates the entities. |
+| `tonly-mttl-w01-addon` | Home Assistant app/add-on | The controller. Speaks the vendor protocol. |
+| `tonly-mttl-w01-ha` | **this repo**, via HACS | The integration. Creates the entities. |
 
 Neither works alone.
 
@@ -42,18 +42,18 @@ Neither works alone.
 1. **Settings → Apps → ⋮ → Repositories**, add:
 
    ```
-   https://github.com/Aabayoumy/moshtarak-wifi-addon
+   https://github.com/Aabayoumy/tonly-mttl-w01-addon
    ```
 
-   Then install and start **Moshtarak WiFi** from it.
+   Then install and start **MTTL-W01 WiFi** from it.
 
    The add-on has to be added this way once, by hand: HACS distributes
    *integrations*, and the Supervisor distributes add-ons, so the two can never
    come from a single tap.
 
-2. In HACS → Integrations → **Moshtarak WiFi (TONLY MTTL-W01)** → Download.
+2. In HACS → Integrations → **MTTL-W01 WiFi (TONLY MTTL-W01)** → Download.
 3. Restart Home Assistant.
-4. **Settings → Devices & Services → Add Integration → Moshtarak WiFi.**
+4. **Settings → Devices & Services → Add Integration → MTTL-W01 WiFi.**
 
 In the ordinary case there is nothing to type on step 4. The flow asks the
 Supervisor where the add-on is, connects to it, and creates the entry on the
@@ -168,7 +168,7 @@ command).
 So: entities are keyed on `socket`, writes go to
 `POST /api/switch/socket/<n>`, and the firmware channel appears **only** in
 diagnostics. The controller still exposes the channel route, labelled
-`legacy, used by HA` in its own source — do not use it. `MoshtarakApi` has no
+`legacy, used by HA` in its own source — do not use it. `MttlW01Api` has no
 `set_channel` method, and `set_socket()` rejects anything outside 1–4.
 
 ## Protection
@@ -284,7 +284,7 @@ outright.
 MIT for this integration. It contains **no vendor protocol code** — only an HTTP
 client for the controller's REST API. The protocol implementation, and the
 questions about redistributing a reverse-engineered protocol, live in the
-[add-on repository](https://github.com/Aabayoumy/moshtarak-wifi-addon); read its
+[add-on repository](https://github.com/Aabayoumy/tonly-mttl-w01-addon); read its
 `NOTICE.md` before doing anything with it.
 
 TONLY, LG-U+ and MTTL-W01 are trademarks of their respective owners. This project

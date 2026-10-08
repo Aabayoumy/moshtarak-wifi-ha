@@ -1,4 +1,4 @@
-"""Async HTTP client for the Moshtarak WiFi controller.
+"""Async HTTP client for the MTTL-W01 WiFi controller.
 
 This module contains NO vendor protocol code. It speaks only the controller's
 own REST API, which is why the integration carries none of the licensing weight
@@ -27,19 +27,19 @@ from .const import ATTR_CHANNEL, ATTR_PROTECTED, ATTR_SOCKET
 DEFAULT_TIMEOUT = 10
 
 
-class MoshtarakApiError(Exception):
+class MttlW01ApiError(Exception):
     """Base error for the controller API."""
 
 
-class MoshtarakCannotConnect(MoshtarakApiError):
+class MttlW01CannotConnect(MttlW01ApiError):
     """The controller could not be reached at all."""
 
 
-class MoshtarakInvalidResponse(MoshtarakApiError):
+class MttlW01InvalidResponse(MttlW01ApiError):
     """The controller answered with something this client cannot trust."""
 
 
-class MoshtarakProtectedError(MoshtarakApiError):
+class MttlW01ProtectedError(MttlW01ApiError):
     """The controller refused because the outlet is protected.
 
     The controller's own wording is carried through verbatim, e.g.
@@ -49,17 +49,17 @@ class MoshtarakProtectedError(MoshtarakApiError):
     """
 
 
-class MoshtarakStripUnreachable(MoshtarakApiError):
+class MttlW01StripUnreachable(MttlW01ApiError):
     """The controller is fine but the strip itself cannot be reached.
 
     A normal state, not a broken integration: the strip is rebooting, asleep, or
-    not provisioned yet. Kept distinct from MoshtarakCannotConnect on purpose,
+    not provisioned yet. Kept distinct from MttlW01CannotConnect on purpose,
     because collapsing the two would report a perfectly healthy controller as a
     dead one and hide the actual problem.
     """
 
 
-class MoshtarakApi:
+class MttlW01Api:
     """Thin async wrapper over the controller's HTTP API."""
 
     def __init__(
@@ -82,20 +82,20 @@ class MoshtarakApi:
             ) as resp:
                 body = await resp.json(content_type=None)
         except asyncio.TimeoutError as err:
-            raise MoshtarakCannotConnect(
+            raise MttlW01CannotConnect(
                 f"Timed out talking to the controller at {self.host}"
             ) from err
         except aiohttp.ClientError as err:
-            raise MoshtarakCannotConnect(
+            raise MttlW01CannotConnect(
                 f"Cannot reach the controller at {self.host}: {err}"
             ) from err
         except ValueError as err:
-            raise MoshtarakInvalidResponse(
+            raise MttlW01InvalidResponse(
                 f"The controller at {self.host} did not return JSON"
             ) from err
 
         if not isinstance(body, dict):
-            raise MoshtarakInvalidResponse(
+            raise MttlW01InvalidResponse(
                 f"Expected a JSON object from {path}, got {type(body).__name__}"
             )
         return body
@@ -136,21 +136,21 @@ class MoshtarakApi:
         outlet, including a protected one.
 
         Raises:
-            MoshtarakStripUnreachable: the controller answered, but this strip
+            MttlW01StripUnreachable: the controller answered, but this strip
                 could not be reached. A normal state, reported as such.
-            MoshtarakCannotConnect: the controller itself is unreachable.
+            MttlW01CannotConnect: the controller itself is unreachable.
         """
         path = "/api/probe"
         if device:
             path = f"/api/probe?device={device}"
 
-        # A connection failure here propagates as MoshtarakCannotConnect and must
+        # A connection failure here propagates as MttlW01CannotConnect and must
         # NOT be turned into "strip unreachable" - that would report a healthy
         # controller as a dead one and point the user at the wrong hardware.
         body = await self._get(path)
 
         if not body.get("ok"):
-            raise MoshtarakStripUnreachable(
+            raise MttlW01StripUnreachable(
                 str(body.get("error") or "the strip did not answer")
             )
         return body
@@ -172,14 +172,14 @@ class MoshtarakApi:
             device: Optional strip device id, for multi-strip setups.
 
         Raises:
-            MoshtarakProtectedError: the outlet is protected and this is an OFF.
-            MoshtarakCannotConnect: the controller is unreachable.
+            MttlW01ProtectedError: the outlet is protected and this is an OFF.
+            MttlW01CannotConnect: the controller is unreachable.
         """
         if not isinstance(socket, int) or not 1 <= socket <= 4:
             # Fail loudly in the client. A channel number arriving here means a
             # caller mixed up the two numberings, and the whole point of this
             # guard is that it never reaches the wire.
-            raise MoshtarakInvalidResponse(
+            raise MttlW01InvalidResponse(
                 f"socket must be a physical socket number 1-4, got {socket!r}"
             )
 
@@ -197,11 +197,11 @@ class MoshtarakApi:
                 except ValueError:
                     body = {}
         except asyncio.TimeoutError as err:
-            raise MoshtarakCannotConnect(
+            raise MttlW01CannotConnect(
                 f"Timed out switching socket {socket}"
             ) from err
         except aiohttp.ClientError as err:
-            raise MoshtarakCannotConnect(
+            raise MttlW01CannotConnect(
                 f"Cannot reach the controller at {self.host}: {err}"
             ) from err
 
@@ -223,12 +223,12 @@ class MoshtarakApi:
                     f"channel {switch.get(ATTR_CHANNEL)}, "
                     f"protected={switch.get(ATTR_PROTECTED)})"
                 )
-            raise MoshtarakProtectedError(
+            raise MttlW01ProtectedError(
                 (message or f"socket {socket} is protected and will not be switched off")
                 + detail
             )
 
-        raise MoshtarakApiError(
+        raise MttlW01ApiError(
             f"Controller refused the command for socket {socket} "
             f"(HTTP {status}): {message or 'no reason given'}"
         )

@@ -35,7 +35,7 @@ script covers that link, so the socket/channel claims are read off bytes a
 strip actually received rather than inferred from a returned state.
 
 It needs the fake strip from the
-[add-on repository](https://github.com/Aabayoumy/moshtarak-wifi-addon), which
+[add-on repository](https://github.com/Aabayoumy/tonly-mttl-w01-addon), which
 it locates automatically, and a long-lived HA token at
 `~/.config/opencode/ha-token`.
 

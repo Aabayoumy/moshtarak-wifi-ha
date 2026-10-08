@@ -1,4 +1,4 @@
-"""Config flow for Moshtarak WiFi.
+"""Config flow for MTTL-W01 WiFi.
 
 Setup asks one question - where is the controller - and validates it by calling
 `/api/health`, which answers 200 even with zero strips connected. That matters:
@@ -25,7 +25,7 @@ import voluptuous as vol
 from homeassistant.config_entries import ConfigFlow, ConfigFlowResult, OptionsFlow
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
-from .api import MoshtarakApi, MoshtarakApiError
+from .api import MttlW01Api, MttlW01ApiError
 from .const import CONF_HOST, CONF_SCAN_INTERVAL, DOMAIN
 from .host_discovery import async_candidate_hosts
 
@@ -35,8 +35,8 @@ _LOGGER = logging.getLogger(__name__)
 async def _probe(session, host: str) -> bool:
     """Return True if a healthy controller answers at `host`."""
     try:
-        health = await MoshtarakApi(session, host).health()
-    except MoshtarakApiError as err:
+        health = await MttlW01Api(session, host).health()
+    except MttlW01ApiError as err:
         _LOGGER.debug("Controller probe failed for %s: %s", host, err)
         return False
     return bool(health.get("ok"))
@@ -53,8 +53,8 @@ def _schema(default_host: str = "", scan_interval: int = 5) -> vol.Schema:
     )
 
 
-class MoshtarakConfigFlow(ConfigFlow, domain=DOMAIN):
-    """Handle a config flow for Moshtarak WiFi."""
+class MttlW01ConfigFlow(ConfigFlow, domain=DOMAIN):
+    """Handle a config flow for MTTL-W01 WiFi."""
 
     VERSION = 1
 
@@ -123,10 +123,10 @@ class MoshtarakConfigFlow(ConfigFlow, domain=DOMAIN):
     @staticmethod
     def async_get_options_flow(config_entry) -> Any:
         """Options flow so the poll interval can be changed without re-adding."""
-        return MoshtarakOptionsFlow()
+        return MttlW01OptionsFlow()
 
 
-class MoshtarakOptionsFlow(OptionsFlow):
+class MttlW01OptionsFlow(OptionsFlow):
     """Change the poll interval without removing and re-adding the integration."""
 
     async def async_step_init(

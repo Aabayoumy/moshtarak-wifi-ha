@@ -1,4 +1,4 @@
-"""The Moshtarak WiFi integration.
+"""The MTTL-W01 WiFi integration.
 
 Controls TONLY / LG-U+ MTTL-W01 four-socket Wi-Fi power strips in Home Assistant.
 
@@ -29,7 +29,7 @@ from homeassistant.exceptions import ConfigEntryNotReady
 from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
-from .api import MoshtarakApi, MoshtarakApiError
+from .api import MttlW01Api, MttlW01ApiError
 from .const import (
     CONF_HOST,
     CONF_SCAN_INTERVAL,
@@ -38,8 +38,8 @@ from .const import (
     ISSUE_PROTECTION_UNKNOWN,
 )
 from .coordinator import (
-    MoshtarakProbeCoordinator,
-    MoshtarakStateCoordinator,
+    MttlW01ProbeCoordinator,
+    MttlW01StateCoordinator,
     validate_scan_interval,
 )
 
@@ -53,30 +53,30 @@ PLATFORMS: list[Platform] = [
 
 
 @dataclass
-class MoshtarakRuntimeData:
+class MttlW01RuntimeData:
     """Everything a platform needs, attached to the config entry."""
 
-    api: MoshtarakApi
-    state: MoshtarakStateCoordinator
-    probe: MoshtarakProbeCoordinator
+    api: MttlW01Api
+    state: MttlW01StateCoordinator
+    probe: MttlW01ProbeCoordinator
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    """Set up Moshtarak WiFi from a config entry."""
+    """Set up MTTL-W01 WiFi from a config entry."""
     host = str(entry.data.get(CONF_HOST) or "").strip().rstrip("/")
     if not host:
         _LOGGER.error("No controller address configured")
         return False
 
-    api = MoshtarakApi(async_get_clientsession(hass), host)
+    api = MttlW01Api(async_get_clientsession(hass), host)
 
     try:
         health = await api.health()
-    except MoshtarakApiError as err:
+    except MttlW01ApiError as err:
         # Retrying is right: the add-on may simply not be started yet, and a
         # first-time installer will hit this every time.
         raise ConfigEntryNotReady(
-            f"The Moshtarak WiFi controller at {host} is not answering: {err}"
+            f"The MTTL-W01 WiFi controller at {host} is not answering: {err}"
         ) from err
 
     if not health.get("ok"):
@@ -84,10 +84,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     interval = validate_scan_interval(entry.options.get(CONF_SCAN_INTERVAL, 5))
 
-    state = MoshtarakStateCoordinator(hass, api, interval)
-    probe = MoshtarakProbeCoordinator(hass, api, state)
+    state = MttlW01StateCoordinator(hass, api, interval)
+    probe = MttlW01ProbeCoordinator(hass, api, state)
 
-    entry.runtime_data = MoshtarakRuntimeData(api=api, state=state, probe=probe)
+    entry.runtime_data = MttlW01RuntimeData(api=api, state=state, probe=probe)
 
     # Refresh up front so the first `async_add_entities` already knows which
     # strips exist. Without this, a strip that is already connected would have
@@ -108,7 +108,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # voltage simply has no reading yet.
     try:
         await probe.async_refresh()
-    except MoshtarakApiError as err:
+    except MttlW01ApiError as err:
         _LOGGER.debug("No measurement available yet: %s", err)
 
     await _async_update_repairs(hass, entry)
@@ -117,7 +117,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     entry.async_on_unload(state.async_add_listener(_make_repair_listener(hass, entry)))
 
     _LOGGER.info(
-        "Moshtarak WiFi ready: %s real strip(s) known to the controller at %s",
+        "MTTL-W01 WiFi ready: %s real strip(s) known to the controller at %s",
         len(state.real_strips()),
         host,
     )
@@ -159,7 +159,7 @@ async def _async_update_repairs(hass: HomeAssistant, entry: ConfigEntry) -> None
     Both are deliberately quiet when there is nothing wrong. A repair issue that
     fires on every poll is one nobody reads.
     """
-    runtime: MoshtarakRuntimeData = entry.runtime_data
+    runtime: MttlW01RuntimeData = entry.runtime_data
     state = runtime.state
 
     if not state.data:

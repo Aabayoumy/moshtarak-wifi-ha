@@ -1,0 +1,17 @@
+{
+  "domain": "tonly_mttl_w01",
+  "name": "TONLY MTTL-W01 WiFi",
+  "codeowners": [
+    "@Aabayoumy"
+  ],
+  "config_flow": true,
+  "documentation": "https://github.com/Aabayoumy/tonly-mttl-w01-ha",
+  "integration_type": "hub",
+  "iot_class": "local_polling",
+  "issue_tracker": "https://github.com/Aabayoumy/tonly-mttl-w01-ha/issues",
+  "requirements": [],
+  "version": "1.0.0",
+  "after_dependencies": [
+    "hassio"
+  ]
+}

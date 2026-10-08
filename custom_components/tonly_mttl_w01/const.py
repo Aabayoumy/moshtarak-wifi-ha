@@ -1,4 +1,4 @@
-"""Constants for the Moshtarak WiFi integration.
+"""Constants for the MTTL-W01 WiFi integration.
 
 Terminology is not cosmetic in this project, so it is fixed here once.
 
@@ -20,12 +20,12 @@ from __future__ import annotations
 from datetime import timedelta
 from typing import Final
 
-DOMAIN: Final = "moshtarak_wifi"
+DOMAIN: Final = "tonly_mttl_w01"
 
 # There is deliberately no hardcoded controller host here.
 #
 # The first version of this integration carried
-#     "http://a0d7b954_moshtarak_wifi:8099"
+#     "http://a0d7b954_tonly_mttl_w01:8099"
 # as its default, which was wrong twice over: the repository prefix was guessed
 # and never resolved, and in any case an add-on's slug is derived from a hash of
 # the repository URL, so every fork and mirror gets a different container name.

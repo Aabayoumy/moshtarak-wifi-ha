@@ -1,12 +1,12 @@
-"""Coordinators for Moshtarak WiFi.
+"""Coordinators for MTTL-W01 WiFi.
 
 Two of them, on purpose.
 
-`MoshtarakStateCoordinator` polls the controller's cached status read every few
+`MttlW01StateCoordinator` polls the controller's cached status read every few
 seconds. That is cheap: the controller serves a cache, so several clients polling
 do not each provoke a fresh read of the strip.
 
-`MoshtarakProbeCoordinator` polls `/api/probe`, which sends an ACTIVE query to
+`MttlW01ProbeCoordinator` polls `/api/probe`, which sends an ACTIVE query to
 the strip and is not served from a cache. Running it at the state cadence would
 be needlessly chatty on the wire, so it runs on its own, much slower schedule.
 
@@ -35,10 +35,10 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from .api import (
-    MoshtarakApi,
-    MoshtarakApiError,
-    MoshtarakCannotConnect,
-    MoshtarakStripUnreachable,
+    MttlW01Api,
+    MttlW01ApiError,
+    MttlW01CannotConnect,
+    MttlW01StripUnreachable,
 )
 from .const import (
     DOMAIN,
@@ -52,13 +52,13 @@ _LOGGER = logging.getLogger(__name__)
 PlatformAdder = Callable[[list[str]], Awaitable[None]]
 
 
-class MoshtarakStateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
+class MttlW01StateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     """Owns the per-strip state and the list of known strips."""
 
     def __init__(
         self,
         hass: HomeAssistant,
-        api: MoshtarakApi,
+        api: MttlW01Api,
         scan_interval,
     ) -> None:
         super().__init__(
@@ -213,9 +213,9 @@ class MoshtarakStateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     async def _async_update_data(self) -> dict[str, Any]:
         try:
             devices_doc = await self.api.devices()
-        except MoshtarakCannotConnect as err:
+        except MttlW01CannotConnect as err:
             raise UpdateFailed(str(err)) from err
-        except MoshtarakApiError as err:
+        except MttlW01ApiError as err:
             raise UpdateFailed(f"Unexpected controller error: {err}") from err
 
         devices = devices_doc.get("devices") or []
@@ -244,7 +244,7 @@ class MoshtarakStateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     states[devid] = await self.api.state()
                 else:
                     states[devid] = await self.api.state(devid)
-            except MoshtarakApiError as err:
+            except MttlW01ApiError as err:
                 # The controller is up; this one strip is not answering. Recorded
                 # as "no reading" for that strip only. Not a failure of the
                 # whole integration, and definitely not a reason to stop polling
@@ -281,14 +281,14 @@ class MoshtarakStateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         return payload
 
 
-class MoshtarakProbeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
+class MttlW01ProbeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     """Volts and RSSI, on a slow cadence, per strip."""
 
     def __init__(
         self,
         hass: HomeAssistant,
-        api: MoshtarakApi,
-        state: MoshtarakStateCoordinator,
+        api: MttlW01Api,
+        state: MttlW01StateCoordinator,
     ) -> None:
         super().__init__(
             hass,
@@ -304,13 +304,13 @@ class MoshtarakProbeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         for devid in self.state.known_strips:
             try:
                 out[devid] = await self.api.probe(devid)
-            except MoshtarakStripUnreachable as err:
+            except MttlW01StripUnreachable as err:
                 # The strip is asleep or rebooting. Ordinary. The sensors read
                 # this as "no measurement", not as an error, because voltage
                 # does not exist while the strip is not answering.
                 _LOGGER.debug("No measurement from strip %s: %s", devid, err)
                 out[devid] = None
-            except MoshtarakApiError as err:
+            except MttlW01ApiError as err:
                 raise UpdateFailed(str(err)) from err
         return out
 
@@ -332,7 +332,7 @@ def validate_scan_interval(value: Any) -> timedelta | None:
 
 
 __all__ = [
-    "MoshtarakProbeCoordinator",
-    "MoshtarakStateCoordinator",
+    "MttlW01ProbeCoordinator",
+    "MttlW01StateCoordinator",
     "validate_scan_interval",
 ]

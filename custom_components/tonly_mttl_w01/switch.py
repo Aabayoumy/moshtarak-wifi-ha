@@ -1,4 +1,4 @@
-"""Switch platform for Moshtarak WiFi.
+"""Switch platform for MTTL-W01 WiFi.
 
 Read the note at the top of `api.py` before changing anything here. The wrong
 route from this file is not a theoretical mistake: an earlier version of this
@@ -11,12 +11,13 @@ the protected channel.
 So, stated as rules this module does not break:
 
 1. Entities are keyed on `socket`, the PHYSICAL number. Never on `id`/`channel`.
-2. Writes go through `MoshtarakApi.set_socket`, which only accepts 1-4.
+2. Writes go through `MttlW01Api.set_socket`, which only accepts 1-4.
 3. A protected outlet refuses OFF here, locally, before anything is sent.
 """
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import Any
 
@@ -26,7 +27,7 @@ from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .api import MoshtarakProtectedError
+from .api import MttlW01ProtectedError
 from .const import (
     ATTR_DRAWS_CURRENT,
     ATTR_PROTECTED,
@@ -37,7 +38,7 @@ from .const import (
     DOMAIN,
     SOCKET_COUNT,
 )
-from .coordinator import MoshtarakStateCoordinator, validate_scan_interval
+from .coordinator import MttlW01StateCoordinator, validate_scan_interval
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -49,7 +50,7 @@ async def async_setup_entry(
 ) -> None:
     """Set up the switches for every strip this controller knows about."""
     runtime = entry.runtime_data
-    coordinator: MoshtarakStateCoordinator = runtime.state
+    coordinator: MttlW01StateCoordinator = runtime.state
     created: set[str] = set()
 
     async def _add(devids: list[str]) -> None:
@@ -59,7 +60,7 @@ async def async_setup_entry(
         created.update(fresh)
         async_add_entities(
             [
-                MoshtarakSwitch(coordinator, devid, number)
+                MttlW01Switch(coordinator, devid, number)
                 for devid in fresh
                 for number in range(1, SOCKET_COUNT + 1)
             ]
@@ -69,7 +70,7 @@ async def async_setup_entry(
     await _add(coordinator.known_strips)
 
 
-class MoshtarakSwitch(CoordinatorEntity[MoshtarakStateCoordinator], SwitchEntity):
+class MttlW01Switch(CoordinatorEntity[MttlW01StateCoordinator], SwitchEntity):
     """One physical outlet of one strip.
 
     `devid` and `number` are the whole identity: a strip id and a PHYSICAL socket
@@ -82,7 +83,7 @@ class MoshtarakSwitch(CoordinatorEntity[MoshtarakStateCoordinator], SwitchEntity
 
     def __init__(
         self,
-        coordinator: MoshtarakStateCoordinator,
+        coordinator: MttlW01StateCoordinator,
         devid: str,
         number: int,
     ) -> None:
@@ -99,6 +100,7 @@ class MoshtarakSwitch(CoordinatorEntity[MoshtarakStateCoordinator], SwitchEntity
             "manufacturer": "TONLY / LG-U+",
             "model": model,
             "name": self._strip_name(doc, devid),
+            "sw_version": str(doc.get("firmware") or ""),
         }
 
     # -- naming ------------------------------------------------------
@@ -124,7 +126,7 @@ class MoshtarakSwitch(CoordinatorEntity[MoshtarakStateCoordinator], SwitchEntity
             return True
         return name.strip().lower() == f"socket {number}".strip()
 
-    def _build_name(self, coordinator: MoshtarakStateCoordinator, number: int) -> str:
+    def _build_name(self, coordinator: MttlW01StateCoordinator, number: int) -> str:
         entry = coordinator.socket(self._devid, number)
         name = entry.get("name") if entry else None
         if self._is_default_name(name, number):
@@ -214,7 +216,7 @@ class MoshtarakSwitch(CoordinatorEntity[MoshtarakStateCoordinator], SwitchEntity
             await self.coordinator.api.set_socket(
                 self._number, on, device=self._devid
             )
-        except MoshtarakProtectedError as err:
+        except MttlW01ProtectedError as err:
             # The controller's own wording leads the message. It names the
             # physical socket and says why, which is exactly what a generic
             # "failed" would throw away.
@@ -227,7 +229,24 @@ class MoshtarakSwitch(CoordinatorEntity[MoshtarakStateCoordinator], SwitchEntity
         # Do not flip the switch optimistically. Relay state echoes back within
         # 1-2s and the physical relay can take up to 20s to close, so an
         # immediate optimistic read would claim power that has not arrived.
+        #
+        # One refresh is not enough, though: the controller force-reads state
+        # immediately after sending the command, *before* the strip's echo
+        # lands, and serves that stale reading from its poll-window cache for
+        # the next couple of seconds. Refreshing again ~2.5s later reads the
+        # true echo once the cache has expired, so the UI shows the new state
+        # after a couple of seconds rather than on the next scheduled poll.
         await self.coordinator.async_request_refresh()
+        self.hass.async_create_task(self._async_refresh_after_echo())
+
+    async def _async_refresh_after_echo(self) -> None:
+        """Re-read after the strip's echo has landed and the cache expired."""
+        try:
+            await asyncio.sleep(2.5)
+            await self.coordinator.async_request_refresh()
+        except asyncio.CancelledError:
+            # Unload during the wait: nothing to refresh, nothing to clean up.
+            return
 
     async def async_turn_on(self, **kwargs: Any) -> None:
         await self._async_drive(True)
@@ -236,4 +255,4 @@ class MoshtarakSwitch(CoordinatorEntity[MoshtarakStateCoordinator], SwitchEntity
         await self._async_drive(False)
 
 
-__all__ = ["MoshtarakSwitch", "async_setup_entry"]
+__all__ = ["MttlW01Switch", "async_setup_entry"]

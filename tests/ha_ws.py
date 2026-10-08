@@ -27,8 +27,11 @@ import struct
 import sys
 from pathlib import Path
 
-HA_HOST = "10.0.0.11"
-HA_PORT = 8123
+# Overridable so the suite can be pointed at a tunnel (HA_HOST=127.0.0.1
+# HA_PORT=18123). On some hosts the OS denies *this* process direct LAN
+# access while curl/ssh are allowed; an ssh -L forward sidesteps that.
+HA_HOST = os.environ.get("HA_HOST", "10.0.0.11")
+HA_PORT = int(os.environ.get("HA_PORT", "8123"))
 TOKEN_FILES = (
     Path.home() / ".config/opencode/ha-token",
     Path.home() / ".hass-token",
@@ -257,9 +260,9 @@ if __name__ == "__main__":
         print(f"auth ok, {len(states)} entities visible")
         mw = [
             s for s in states
-            if "mttl" in s.get("entity_id", "") or "moshtarak" in s.get("entity_id", "")
+            if "mttl" in s.get("entity_id", "") or "tonly_mttl_w01" in s.get("entity_id", "")
         ]
-        print(f"{len(mw)} moshtarak entities")
+        print(f"{len(mw)} tonly/mttl entities")
         for s in sorted(mw, key=lambda x: x["entity_id"]):
             print(f"  {s['state']:<12} {s['entity_id']}")
     else:
