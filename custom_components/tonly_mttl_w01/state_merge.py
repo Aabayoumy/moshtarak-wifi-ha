@@ -71,6 +71,10 @@ class MergeResult:
     held: tuple[int, ...] = ()
     frozen: bool = False
     dropped: bool = False
+    # Commanded sockets whose window expired with the strip still reporting
+    # something other than the tapped value: the tap display reverts here.
+    # Empty when the echo confirmed in time or there was no window.
+    expired: tuple[int, ...] = ()
 
 
 def parse_switches(body: Any) -> dict[int, bool] | None:
@@ -155,7 +159,14 @@ def merge_switches(
     memory.invalid_streak = 0
 
     if memory.commanded is not None and now >= memory.deadline:
+        expired: tuple[int, ...] = ()
+        if reported.get(memory.commanded) != memory.want:
+            # The echo never confirmed: the tap display reverts to strip
+            # truth on this poll, after showing the tapped value all window.
+            expired = (memory.commanded,)
         memory.commanded = None
+    else:
+        expired = ()
     in_window = memory.commanded is not None and now < memory.deadline
 
     merged: dict[int, bool] = {}
@@ -190,4 +201,4 @@ def merge_switches(
             continue
         merged[socket] = value
         memory.good[socket] = value
-    return MergeResult(merged=merged, held=tuple(held))
+    return MergeResult(merged=merged, held=tuple(held), expired=expired)

@@ -186,6 +186,21 @@ def main() -> int:
         res.merged == {1: False, 2: True, 3: False, 4: True} and not res.held,
         "after a failed tap every socket renders strip truth",
     )
+    # An echo that never arrives reverts the tap display at the deadline -
+    # and says so, so a revert is distinguishable from a flap in the log.
+    memlate = smx.StripMemory()
+    smx.merge_switches(memlate, smx.parse_switches(body({1: False, 2: False, 3: False, 4: True})), now)
+    smx.note_command(memlate, 1, True, now)
+    res = smx.merge_switches(memlate, smx.parse_switches(body({1: False, 2: False, 3: False, 4: True})), now + smx.QUARANTINE_SECONDS + 1)
+    check(
+        res.merged[1] is False and res.expired == (1,),
+        "an unconfirmed tap reverts with an expired marker",
+    )
+    res = smx.merge_switches(memlate, smx.parse_switches(body({1: True, 2: False, 3: False, 4: True})), now + smx.QUARANTINE_SECONDS + 6)
+    check(
+        res.merged[1] is True and res.expired == (),
+        "a late echo after expiry renders without further markers",
+    )
 
     # -- a lone transient never shows ----------------------------------------
     mem3 = smx.StripMemory()

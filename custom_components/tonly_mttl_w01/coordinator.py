@@ -288,9 +288,15 @@ class MttlW01StateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 memory.last_body = body
                 if result.held:
                     _LOGGER.debug(
-                        "Holding socket(s) %s of strip %s at last-good "
-                        "until confirmed",
+                        "Holding socket(s) %s of strip %s at last-good",
                         sorted(result.held),
+                        devid,
+                    )
+                if result.expired:
+                    _LOGGER.debug(
+                        "Tap on socket(s) %s of strip %s never confirmed, "
+                        "reverting to strip truth",
+                        sorted(result.expired),
                         devid,
                     )
         return states
