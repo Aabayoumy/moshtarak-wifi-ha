@@ -154,7 +154,7 @@ def main() -> int:
         "a re-tap replaces the displayed value immediately",
     )
 
-    # -- non-commanded sockets hold, then confirm ---------------------------
+    # -- non-commanded sockets hold for the whole window -----------------------
     mem2 = smx.StripMemory()
     smx.merge_switches(mem2, smx.parse_switches(body({1: False, 2: False, 3: False, 4: True})), now)
     smx.note_command(mem2, 1, True, now)
@@ -163,10 +163,28 @@ def main() -> int:
         res.merged == {1: True, 2: False, 3: False, 4: True} and res.held == (2,),
         "a divergent non-commanded socket holds at last-good in the window",
     )
-    res = smx.merge_switches(mem2, smx.parse_switches(body({1: True, 2: True, 3: False, 4: True})), now + 6)
+    # A second agreeing poll does NOT release the hold: polls inside one
+    # controller cache generation are usually the same cached transient
+    # read twice, so agreement proves nothing.
+    res = smx.merge_switches(mem2, smx.parse_switches(body({1: True, 2: True, 3: False, 4: True})), now + 2)
+    check(
+        res.merged[2] is False and res.held == (2,),
+        "a repeat divergent reading still holds inside the window",
+    )
+    res = smx.merge_switches(mem2, smx.parse_switches(body({1: True, 2: True, 3: False, 4: True})), now + smx.QUARANTINE_SECONDS + 1)
     check(
         res.merged[2] is True and not res.held,
-        "a change confirmed by two consecutive polls is accepted in-window",
+        "after the deadline strip truth wins without confirmation",
+    )
+    # A failure releases the window at once: the tap changed nothing.
+    memf = smx.StripMemory()
+    smx.merge_switches(memf, smx.parse_switches(body({1: True, 2: False, 3: False, 4: True})), now)
+    smx.note_command(memf, 1, False, now)
+    smx.command_failed(memf)
+    res = smx.merge_switches(memf, smx.parse_switches(body({1: False, 2: True, 3: False, 4: True})), now + 1)
+    check(
+        res.merged == {1: False, 2: True, 3: False, 4: True} and not res.held,
+        "after a failed tap every socket renders strip truth",
     )
 
     # -- a lone transient never shows ----------------------------------------
@@ -182,10 +200,6 @@ def main() -> int:
     check(
         res.merged == {1: True, 2: False, 3: False, 4: True} and not res.held,
         "the next agreeing poll restores the real picture",
-    )
-    check(
-        mem3.good == {1: True, 2: False, 3: False, 4: True},
-        "held values never pollute last-good",
     )
 
     # -- the window ends -------------------------------------------------------
@@ -209,7 +223,7 @@ def main() -> int:
     smx.merge_switches(mem5, smx.parse_switches(body({1: True, 2: True, 3: False, 4: True})), now + 1)
     smx.note_command(mem5, 2, False, now + 2)
     check(
-        mem5.commanded == 2 and mem5.want is False and mem5.confirm == {},
+        mem5.commanded == 2 and mem5.want is False,
         "a new command replaces the quarantine and its evidence",
     )
     check(

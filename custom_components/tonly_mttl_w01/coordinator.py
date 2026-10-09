@@ -49,6 +49,7 @@ from .const import (
 )
 from .state_merge import (
     StripMemory,
+    command_failed,
     merge_switches,
     note_command,
     parse_switches,
@@ -220,18 +221,30 @@ class MttlW01StateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 return dev
         return None
 
-    def command_sent(self, devid: str, socket: int, want: bool) -> None:
-        """Record a successful switch command for the settling policy.
+    def command_started(self, devid: str, socket: int, want: bool) -> None:
+        """Record a tap for the settling policy.
 
-        Called only after the controller accepted the command - never for a
-        refused or failed one, where there is no transition to settle. The
-        commanded socket keeps rendering strip truth; the other sockets of
-        this strip hold last-good until confirmed. See state_merge.py.
+        Called when the tap starts, before the POST returns - a poll landing
+        in the round-trip gap must already see the window open, or it serves
+        pre-tap truth and visibly reverts the tap. See state_merge.py.
         """
         memory = self._merge.setdefault(
             str(devid).strip().upper(), StripMemory()
         )
         note_command(memory, socket, want, time.monotonic())
+
+    def command_failed(self, devid: str) -> None:
+        """Release the settling window: the tap did not land.
+
+        Called when the controller refuses the command or the POST fails.
+        Whatever the tap displayed while in flight is withdrawn at the next
+        poll - which is the honest outcome, because a failed tap changed
+        nothing.
+        """
+        memory = self._merge.setdefault(
+            str(devid).strip().upper(), StripMemory()
+        )
+        command_failed(memory)
 
     def _merge_states(
         self, states: dict[str, dict[str, Any] | None]

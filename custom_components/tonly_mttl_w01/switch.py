@@ -207,6 +207,11 @@ class MttlW01Switch(CoordinatorEntity[MttlW01StateCoordinator], SwitchEntity):
                 "if that is not what you want."
             )
 
+        # Open the settling window BEFORE the POST, not after it succeeds: a
+        # poll landing in the round-trip gap would otherwise serve pre-tap
+        # truth and visibly revert the tap. If the command is refused or
+        # fails below, the window is released again at once.
+        self.coordinator.command_started(self._devid, self._number, on)
         try:
             await self.coordinator.api.set_socket(
                 self._number, on, device=self._devid
@@ -215,31 +220,32 @@ class MttlW01Switch(CoordinatorEntity[MttlW01StateCoordinator], SwitchEntity):
             # The controller's own wording leads the message. It names the
             # physical socket and says why, which is exactly what a generic
             # "failed" would throw away.
+            self.coordinator.command_failed(self._devid)
+            self._schedule_echo_refresh()
             raise HomeAssistantError(str(err)) from err
         except Exception as err:  # noqa: BLE001
             # The tap may or may not have landed - a timeout after the strip
-            # applied is the classic case. No quarantine is recorded, because
+            # applied is the classic case. The window is released, because
             # there is no known transition to settle, but one prompt re-read
             # still resyncs the UI instead of sitting stale until the next
             # scheduled poll.
+            self.coordinator.command_failed(self._devid)
             self._schedule_echo_refresh()
             raise HomeAssistantError(
                 f"Could not switch socket {self._number}: {err}"
             ) from err
 
-        # The command landed. Register the settling window first - the tapped
-        # socket shows the tapped value at once (see below), and the other
-        # sockets of this strip hold last-good until confirmed - and then
-        # re-read once the strip's echo has landed and the controller's
-        # cache has expired.
+        # The command landed and the window is already open, so the tapped
+        # socket shows the tapped value at once (see below) while the other
+        # sockets of this strip hold last-good - and then re-read once the
+        # strip's echo has landed and the controller's cache has expired.
         #
-        # The tapped value displays immediately, deliberately: the controller
-        # accepted the command, and a pre-echo poll would otherwise revert
-        # the tap in the UI for a cycle - the switch visibly bouncing
-        # off-on-off on a single tap. If the echo never confirms (the strip
-        # dropped mid-command), the window expires and strip truth wins
-        # again, so the most this can mislead by is a few seconds on a
-        # command whose fate is genuinely unknown.
+        # The tapped value displays immediately, deliberately: a pre-echo
+        # poll would otherwise revert the tap in the UI for a cycle - the
+        # switch visibly bouncing off-on-off on a single tap. If the echo
+        # never confirms (the strip dropped mid-command), the window expires
+        # and strip truth wins again, so the most this can mislead by is a
+        # few seconds on a command whose fate is genuinely unknown.
         #
         # A refresh right now would still lie about everything else: the
         # controller force-reads state immediately after sending the command,
@@ -249,7 +255,6 @@ class MttlW01Switch(CoordinatorEntity[MttlW01StateCoordinator], SwitchEntity):
         # ~2.5s later, once the cache has expired, so the UI shows the
         # strip's own answer after a couple of seconds instead of on the
         # next scheduled poll.
-        self.coordinator.command_sent(self._devid, self._number, on)
         self._schedule_echo_refresh()
 
     def _schedule_echo_refresh(self) -> None:

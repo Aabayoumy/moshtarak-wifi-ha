@@ -8,16 +8,21 @@ whose relays never moved. Rendered verbatim, either one shows up in Home
 Assistant as the *other* switches flipping and flipping back - relays
 untouched, user alarmed, nothing actually wrong.
 
-So a poll is not trusted blindly while a command is still settling:
+So a poll is not trusted blindly while a command is still settling. The
+window opens the moment the tap starts - before the POST even returns -
+because a poll landing in that half-second would otherwise revert the tap
+display to pre-tap truth:
 
-* the commanded socket renders the tapped value at once - the controller
-  accepted the command, so the tap display never reverts to pre-echo truth
-  while the echo is still travelling. If the echo never confirms (the strip
-  dropped mid-command), the window expires and strip truth wins again;
-* every other socket holds its last-good value until the new value is
-  confirmed by two consecutive valid polls, or the window expires;
-* every other socket holds its last-good value until the new value is
-  confirmed by two consecutive valid polls, or the window expires;
+* the commanded socket renders the tapped value at once, so the tap display
+  never reverts while the command is in flight or the echo travelling. If
+  the command fails, the window is released at once and strip truth wins
+  again; if the echo never confirms, it wins when the window expires;
+* every other socket holds its last-good value for the whole window, with
+  no early release: polls landing inside one controller cache generation
+  are not independent evidence - two agreeing polls in a row are usually
+  the same cached transient read twice, and trusting the second one is how
+  a ghost once got accepted as truth. Strip truth wins when the window
+  expires;
 * a body that is not even well-shaped (no `switches` list, or sockets other
   than exactly {1, 2, 3, 4}) carries no information at all: the previous
   body is reused for a couple of polls, and only if the rot persists does
@@ -36,12 +41,11 @@ from typing import Any
 
 SOCKETS: tuple[int, ...] = (1, 2, 3, 4)
 
-# How long after a command the other sockets need confirmation (seconds).
+# How long after a tap the other sockets hold last-good (seconds).
 # Covers the controller's ~2 s cache pin plus the strip's 1-2 s echo, with
-# room for one full poll cycle on top.
+# room for a full poll cycle on top. There is deliberately no early release:
+# see merge_switches.
 QUARANTINE_SECONDS = 12.0
-# Consecutive agreeing polls that promote a divergent reading to truth.
-CONFIRM_POLLS = 2
 # Consecutive malformed bodies before a strip reads as unavailable instead
 # of frozen.
 INVALID_ESCALATE_POLLS = 3
@@ -55,9 +59,6 @@ class StripMemory:
     commanded: int | None = None
     want: bool = False
     deadline: float = 0.0
-    # socket -> [value, consecutive count], for divergent readings inside
-    # the window that have not confirmed yet.
-    confirm: dict[int, list] = field(default_factory=dict)
     invalid_streak: int = 0
     last_body: dict[str, Any] | None = None
 
@@ -106,17 +107,29 @@ def parse_switches(body: Any) -> dict[int, bool] | None:
 def note_command(
     memory: StripMemory, socket: int, want: bool, now: float
 ) -> StripMemory:
-    """Record a successful command: this socket is settling, the rest wait.
+    """Record a tap: this socket is settling, the rest wait.
 
-    The latest command always wins - a second tap restarts the window and
-    discards unconfirmed evidence from the previous one, because mixed
-    evidence from two overlapping transitions is exactly what must not be
-    trusted.
+    Called when the tap starts, not when the POST returns - a poll landing
+    in between must already see the window open. The latest command always
+    wins: a second tap restarts the window and discards unconfirmed evidence
+    from the previous one, because mixed evidence from two overlapping
+    transitions is exactly what must not be trusted.
     """
     memory.commanded = socket
     memory.want = want
     memory.deadline = now + QUARANTINE_SECONDS
-    memory.confirm = {}
+    return memory
+
+
+def command_failed(memory: StripMemory) -> StripMemory:
+    """Release the window: the tap did not land, show strip truth.
+
+    Called when the POST is refused or fails. Whatever the tap displayed
+    while in flight is withdrawn at the next poll - which is the honest
+    outcome, because a failed tap changed nothing. Last-good and the
+    malformed-body streak are kept: they describe readings, not commands.
+    """
+    memory.commanded = None
     return memory
 
 
@@ -143,7 +156,6 @@ def merge_switches(
 
     if memory.commanded is not None and now >= memory.deadline:
         memory.commanded = None
-        memory.confirm = {}
     in_window = memory.commanded is not None and now < memory.deadline
 
     merged: dict[int, bool] = {}
@@ -156,41 +168,26 @@ def merge_switches(
             # one, beats inventing one.
             merged[socket] = value
             memory.good[socket] = value
-            memory.confirm.pop(socket, None)
             continue
         if in_window and socket == memory.commanded:
-            # The user just tapped this socket and the controller accepted:
-            # show the tapped value at once. A pre-echo poll would otherwise
-            # revert the tap display to the old state for a cycle - the exact
-            # bounce this module exists to kill. `good` still tracks what the
-            # strip actually reports, so if the echo never confirms, the
-            # deadline falls back to strip truth.
+            # The user just tapped this socket: show the tapped value at
+            # once. A pre-echo poll would otherwise revert the tap display
+            # to the old state for a cycle - the exact bounce this module
+            # exists to kill. `good` still tracks what the strip actually
+            # reports, so if the echo never confirms, the deadline falls
+            # back to strip truth.
             merged[socket] = memory.want
             memory.good[socket] = value
-            memory.confirm.pop(socket, None)
             continue
         if value == known:
             merged[socket] = value
-            memory.confirm.pop(socket, None)
             continue
         if in_window:
-            pending = memory.confirm.get(socket)
-            if pending is not None and pending[0] == value:
-                count = pending[1] + 1
-                if count >= CONFIRM_POLLS:
-                    merged[socket] = value
-                    memory.good[socket] = value
-                    memory.confirm.pop(socket, None)
-                else:
-                    memory.confirm[socket] = [value, count]
-                    merged[socket] = known
-                    held.append(socket)
-            else:
-                memory.confirm[socket] = [value, 1]
-                merged[socket] = known
-                held.append(socket)
+            # Hold, unconditionally: see the module docstring for why a
+            # second agreeing poll is not confirmation.
+            merged[socket] = known
+            held.append(socket)
             continue
         merged[socket] = value
         memory.good[socket] = value
-        memory.confirm.pop(socket, None)
     return MergeResult(merged=merged, held=tuple(held))
