@@ -306,6 +306,10 @@ class MttlW01StateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                         sorted(result.expired),
                         devid,
                     )
+                _LOGGER.debug(
+                    "Strip %s merge: merged=%s held=%s expired=%s dropped=%s",
+                    devid, result.merged, result.held, result.expired, result.dropped
+                )
         return states
 
     # -- the update --------------------------------------------------
