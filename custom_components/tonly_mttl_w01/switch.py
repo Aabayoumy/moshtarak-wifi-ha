@@ -281,7 +281,7 @@ class MttlW01Switch(CoordinatorEntity[MttlW01StateCoordinator], SwitchEntity):
         cache has expired by then, so it reads the strip's own answer.
         """
         try:
-            await asyncio.sleep(2.5)
+            await asyncio.sleep(1.5)
             await self.coordinator.async_refresh()
         except asyncio.CancelledError:
             # Unload during the wait: nothing to refresh, nothing to clean up.

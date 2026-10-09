@@ -45,7 +45,7 @@ SOCKETS: tuple[int, ...] = (1, 2, 3, 4)
 # Covers the controller's ~2 s cache pin plus the strip's 1-2 s echo, with
 # room for a full poll cycle on top. There is deliberately no early release:
 # see merge_switches.
-QUARANTINE_SECONDS = 12.0
+QUARANTINE_SECONDS = 30.0
 # Consecutive malformed bodies before a strip reads as unavailable instead
 # of frozen.
 INVALID_ESCALATE_POLLS = 3
