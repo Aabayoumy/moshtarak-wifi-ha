@@ -154,22 +154,22 @@ def main() -> int:
         "a re-tap replaces the displayed value immediately",
     )
 
-    # -- non-commanded sockets hold for the whole window -----------------------
+    # -- non-commanded sockets ALL hold for the whole window -------------------
     mem2 = smx.StripMemory()
     smx.merge_switches(mem2, smx.parse_switches(body({1: False, 2: False, 3: False, 4: True})), now)
     smx.note_command(mem2, 1, True, now)
     res = smx.merge_switches(mem2, smx.parse_switches(body({1: True, 2: True, 3: False, 4: True})), now + 1)
     check(
-        res.merged == {1: True, 2: False, 3: False, 4: True} and res.held == (2,),
-        "a divergent non-commanded socket holds at last-good in the window",
+        res.merged == {1: True, 2: False, 3: False, 4: True} and set(res.held) == {2, 3, 4},
+        "ALL non-commanded sockets hold at last-good in the window",
     )
     # A second agreeing poll does NOT release the hold: polls inside one
     # controller cache generation are usually the same cached transient
     # read twice, so agreement proves nothing.
     res = smx.merge_switches(mem2, smx.parse_switches(body({1: True, 2: True, 3: False, 4: True})), now + 2)
     check(
-        res.merged[2] is False and res.held == (2,),
-        "a repeat divergent reading still holds inside the window",
+        res.merged[2] is False and set(res.held) == {2, 3, 4},
+        "ALL non-commanded sockets still held on repeat poll",
     )
     res = smx.merge_switches(mem2, smx.parse_switches(body({1: True, 2: True, 3: False, 4: True})), now + smx.QUARANTINE_SECONDS + 1)
     check(
