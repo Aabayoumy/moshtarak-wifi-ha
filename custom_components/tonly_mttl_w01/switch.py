@@ -211,6 +211,10 @@ class MttlW01Switch(CoordinatorEntity[MttlW01StateCoordinator], SwitchEntity):
         # poll landing in the round-trip gap would otherwise serve pre-tap
         # truth and visibly revert the tap. If the command is refused or
         # fails below, the window is released again at once.
+        _LOGGER.debug(
+            "Switch %s_%s: command_started want=%s",
+            self._devid, self._number, on
+        )
         self.coordinator.command_started(self._devid, self._number, on)
         try:
             await self.coordinator.api.set_socket(
@@ -220,6 +224,10 @@ class MttlW01Switch(CoordinatorEntity[MttlW01StateCoordinator], SwitchEntity):
             # The controller's own wording leads the message. It names the
             # physical socket and says why, which is exactly what a generic
             # "failed" would throw away.
+            _LOGGER.debug(
+                "Switch %s_%s: command_failed (ProtectedError), scheduling echo refresh",
+                self._devid, self._number
+            )
             self.coordinator.command_failed(self._devid)
             self._schedule_echo_refresh()
             raise HomeAssistantError(str(err)) from err
@@ -229,6 +237,10 @@ class MttlW01Switch(CoordinatorEntity[MttlW01StateCoordinator], SwitchEntity):
             # there is no known transition to settle, but one prompt re-read
             # still resyncs the UI instead of sitting stale until the next
             # scheduled poll.
+            _LOGGER.debug(
+                "Switch %s_%s: command_failed (Exception), scheduling echo refresh",
+                self._devid, self._number
+            )
             self.coordinator.command_failed(self._devid)
             self._schedule_echo_refresh()
             raise HomeAssistantError(
@@ -255,6 +267,10 @@ class MttlW01Switch(CoordinatorEntity[MttlW01StateCoordinator], SwitchEntity):
         # ~2.5s later, once the cache has expired, so the UI shows the
         # strip's own answer after a couple of seconds instead of on the
         # next scheduled poll.
+        _LOGGER.debug(
+            "Switch %s_%s: command succeeded, scheduling echo refresh",
+            self._devid, self._number
+        )
         self._schedule_echo_refresh()
 
     def _schedule_echo_refresh(self) -> None:
@@ -280,11 +296,18 @@ class MttlW01Switch(CoordinatorEntity[MttlW01StateCoordinator], SwitchEntity):
         and swallowed. `async_refresh` runs now, and the controller's poll
         cache has expired by then, so it reads the strip's own answer.
         """
+        _LOGGER.debug(
+            "Switch %s_%s: echo refresh starting",
+            self._devid, self._number
+        )
         try:
             await asyncio.sleep(1.5)
             await self.coordinator.async_refresh()
         except asyncio.CancelledError:
-            # Unload during the wait: nothing to refresh, nothing to clean up.
+            _LOGGER.debug(
+                "Switch %s_%s: echo refresh cancelled",
+                self._devid, self._number
+            )
             return
 
     async def async_turn_on(self, **kwargs: Any) -> None:
