@@ -109,20 +109,20 @@ state and the controller's own view.
 
 ### After you tap a switch
 
-The tapped switch shows the tapped value at once — the controller accepted
-the command, and waiting for the echo would let a pre-echo poll revert the
-tap in the UI for a cycle. If the echo never confirms (the strip dropped
-mid-command), the ~12 s window expires and strip truth wins again. Two
-things protect the other three switches in that window. First, the
-controller force-reads the strip the instant it sends a command - before
-the echo lands - and caches that not-yet-true answer; a mid-transition
-status block can also carry transient values on untouched channels. So the
-other sockets hold their last-good state until two consecutive polls agree
-on a change. Second, a poll body that is not even well-shaped (no
-`switches`, or anything but exactly sockets 1-4) is treated as no
-information: the last frame is reused briefly, and only persistent rot
-reads as unavailable. The policy is pure data in `state_merge.py`, covered
-by `tests/test_state_merge.py`.
+The tapped switch shows the tapped value at once, from the moment the tap
+starts - waiting for the echo would let a poll landing mid-flight revert
+the tap in the UI for a cycle. If the command fails, or the echo never
+confirms, strip truth wins again. The other three sockets hold their
+last-good state for the ~12 s settling window no matter what the polls
+say: polls landing inside one controller cache generation are usually the
+same cached transient read twice, so agreement proves nothing and there is
+no early release. A poll body that is not even well-shaped (no `switches`,
+or anything but exactly sockets 1-4) is treated as no information: the
+last frame is reused briefly, and only persistent rot reads as
+unavailable. Every tap also resets the poll heartbeat - the re-read it
+schedules pushes the next regular poll a full interval out - so the strip
+always gets quiet time to settle. The policy is pure data in
+`state_merge.py`, covered by `tests/test_state_merge.py`.
 
 ## Three things this integration refuses to do
 
