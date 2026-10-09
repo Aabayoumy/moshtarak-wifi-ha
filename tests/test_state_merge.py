@@ -115,13 +115,43 @@ def main() -> int:
     smx.note_command(mem, 1, True, now)
     res = smx.merge_switches(mem, smx.parse_switches(body({1: False, 2: False, 3: False, 4: True})), now + 1)
     check(
-        res.merged[1] is False and not res.held,
-        "pre-echo the commanded socket still shows the old state",
+        res.merged[1] is True and not res.held,
+        "pre-echo the commanded socket already shows the tapped value",
     )
     res = smx.merge_switches(mem, smx.parse_switches(body({1: True, 2: False, 3: False, 4: True})), now + 3)
     check(
         res.merged[1] is True,
         "post-echo the commanded socket converges with no hold",
+    )
+    # The tap display reverts if the strip never confirms: relay stuck or
+    # strip dropped mid-command. Truth wins once the window expires.
+    mem_lie = smx.StripMemory()
+    smx.merge_switches(mem_lie, smx.parse_switches(body({1: True, 2: False, 3: False, 4: True})), now)
+    smx.note_command(mem_lie, 1, False, now)
+    res = smx.merge_switches(mem_lie, smx.parse_switches(body({1: True, 2: False, 3: False, 4: True})), now + 1)
+    check(
+        res.merged[1] is False,
+        "an unconfirmed tap still displays immediately",
+    )
+    res = smx.merge_switches(
+        mem_lie,
+        smx.parse_switches(body({1: True, 2: False, 3: False, 4: True})),
+        now + smx.QUARANTINE_SECONDS + 1,
+    )
+    check(
+        res.merged[1] is True and not res.held,
+        "an unconfirmed tap falls back to strip truth after the deadline",
+    )
+    # A re-tap flips the displayed value at once.
+    smx.note_command(mem_lie, 1, True, now + smx.QUARANTINE_SECONDS + 2)
+    res = smx.merge_switches(
+        mem_lie,
+        smx.parse_switches(body({1: True, 2: False, 3: False, 4: True})),
+        now + smx.QUARANTINE_SECONDS + 3,
+    )
+    check(
+        res.merged[1] is True,
+        "a re-tap replaces the displayed value immediately",
     )
 
     # -- non-commanded sockets hold, then confirm ---------------------------
@@ -226,7 +256,7 @@ def main() -> int:
     smx.note_command(mema, 1, False, now)
     res = smx.merge_switches(mema, smx.parse_switches(body({1: True, 2: False, 3: True, 4: True})), now + 1)
     check(
-        res.merged == {1: True, 2: True, 3: True, 4: True} and res.held == (2,),
+        res.merged == {1: False, 2: True, 3: True, 4: True} and res.held == (2,),
         "quarantine evidence is per strip",
     )
     check(

@@ -62,7 +62,6 @@ ATTR_PROTECTED: Final = "protected"
 ATTR_DRAWS_CURRENT: Final = "draws_current"
 ATTR_SIMULATED: Final = "simulated"
 ATTR_REACHABLE: Final = "reachable"
-ATTR_STATE_CODE: Final = "flag3_flag4"
 
 CONF_HOST: Final = "host"
 CONF_SCAN_INTERVAL: Final = "scan_interval"

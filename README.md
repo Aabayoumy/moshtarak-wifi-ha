@@ -92,7 +92,6 @@ Per strip (four sockets each):
 | `sensor.*_socket_N_power_raw` | The vendor's integer, untouched. The only part of the power reading that is not a guess. |
 | `sensor.*_socket_N_power_(vendor_scale,_unverified)` | Unit W, **no `device_class`** — see below. |
 | `sensor.*_socket_N_energy_(vendor_scale,_unverified)` | Unit kWh, **no `device_class`**. |
-| `sensor.*_socket_N_state_code` | `00` normal, `AB` relay open with residual current. Shown raw. |
 | `binary_sensor.*_socket_N_draws_power` | Something is drawing through this outlet. |
 | `binary_sensor.*_socket_N_protected` | This outlet refuses to be switched off. |
 
@@ -110,18 +109,20 @@ state and the controller's own view.
 
 ### After you tap a switch
 
-No optimistic flip: the switch moves when the strip's echo says it moved,
-a couple of seconds later. Two things protect the other three switches in
-that window. First, the controller force-reads the strip the instant it
-sends a command - before the echo lands - and caches that not-yet-true
-answer; a mid-transition status block can also carry transient values on
-untouched channels. So for ~12 s after a tap, the other sockets hold their
-last-good state until two consecutive polls agree on a change. Second, a
-poll body that is not even well-shaped (no `switches`, or anything but
-exactly sockets 1-4) is treated as no information: the last frame is reused
-briefly, and only persistent rot reads as unavailable. The tapped socket
-itself always shows strip truth. The policy is pure data in
-`state_merge.py`, covered by `tests/test_state_merge.py`.
+The tapped switch shows the tapped value at once — the controller accepted
+the command, and waiting for the echo would let a pre-echo poll revert the
+tap in the UI for a cycle. If the echo never confirms (the strip dropped
+mid-command), the ~12 s window expires and strip truth wins again. Two
+things protect the other three switches in that window. First, the
+controller force-reads the strip the instant it sends a command - before
+the echo lands - and caches that not-yet-true answer; a mid-transition
+status block can also carry transient values on untouched channels. So the
+other sockets hold their last-good state until two consecutive polls agree
+on a change. Second, a poll body that is not even well-shaped (no
+`switches`, or anything but exactly sockets 1-4) is treated as no
+information: the last frame is reused briefly, and only persistent rot
+reads as unavailable. The policy is pure data in `state_merge.py`, covered
+by `tests/test_state_merge.py`.
 
 ## Three things this integration refuses to do
 
@@ -158,8 +159,9 @@ a mystery.
 Status fields 3 and 4 read `on` on **every** channel, including a completely
 empty socket. They are not overload and not overheat. An earlier version of this
 project's code interpreted them as safety flags and produced `overload: true` on
-an empty outlet, which is how the mistake was caught. They are carried as
-unlabelled `flag3`/`flag4` diagnostics.
+an empty outlet, which is how the mistake was caught — and the state-code
+sensor and flag attributes that carried them are now removed outright rather
+than shown raw.
 
 ## The socket/channel trap
 
@@ -223,11 +225,13 @@ against — the entry is setting up or in error — the answer is also no: nothi
 is deleted on the strength of missing data.
 
 Two quirks of that rule, both from the controller rather than this
-integration: an add-on restart opens a one-poll window in which auto mode
-still reports the simulator before your strip redials, so a deleted simulator
-device can reappear after a restart — delete it again once the strip is back;
-and a restart of Home Assistant itself will rebuild any device the controller
-still lists, which is exactly what the refusal protects against.
+integration: auto mode reports the simulator whenever no real strip is
+connected, so a deleted simulator device can reappear after any restart
+that lands while the strip is away — an add-on restart before it redials,
+or a Core restart catching the strip mid-redial — delete it again once the
+strip is back; and a restart of Home Assistant itself will rebuild any
+device the controller still lists, which is exactly what the refusal
+protects against.
 
 The hook is `async_remove_config_entry_device` in `__init__.py`; the decision
 it makes is pure data in `device_removal.py`, covered by

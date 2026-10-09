@@ -10,8 +10,12 @@ untouched, user alarmed, nothing actually wrong.
 
 So a poll is not trusted blindly while a command is still settling:
 
-* the commanded socket always renders what the strip reports - no optimistic
-  flip, and convergence the moment the echo lands;
+* the commanded socket renders the tapped value at once - the controller
+  accepted the command, so the tap display never reverts to pre-echo truth
+  while the echo is still travelling. If the echo never confirms (the strip
+  dropped mid-command), the window expires and strip truth wins again;
+* every other socket holds its last-good value until the new value is
+  confirmed by two consecutive valid polls, or the window expires;
 * every other socket holds its last-good value until the new value is
   confirmed by two consecutive valid polls, or the window expires;
 * a body that is not even well-shaped (no `switches` list, or sockets other
@@ -155,9 +159,13 @@ def merge_switches(
             memory.confirm.pop(socket, None)
             continue
         if in_window and socket == memory.commanded:
-            # The commanded socket renders strip truth, always: pre-echo it
-            # shows the old state (honest), post-echo the new one.
-            merged[socket] = value
+            # The user just tapped this socket and the controller accepted:
+            # show the tapped value at once. A pre-echo poll would otherwise
+            # revert the tap display to the old state for a cycle - the exact
+            # bounce this module exists to kill. `good` still tracks what the
+            # strip actually reports, so if the echo never confirms, the
+            # deadline falls back to strip truth.
+            merged[socket] = memory.want
             memory.good[socket] = value
             memory.confirm.pop(socket, None)
             continue

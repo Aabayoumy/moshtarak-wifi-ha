@@ -34,7 +34,6 @@ from .const import (
     ATTR_REACHABLE,
     ATTR_SIMULATED,
     ATTR_SOCKET,
-    ATTR_STATE_CODE,
     DOMAIN,
     SOCKET_COUNT,
 )
@@ -191,14 +190,6 @@ class MttlW01Switch(CoordinatorEntity[MttlW01StateCoordinator], SwitchEntity):
         }
         if entry:
             attrs[ATTR_DRAWS_CURRENT] = bool(entry.get(ATTR_DRAWS_CURRENT))
-            # Carried as opaque diagnostics. These two fields read "on" on an
-            # EMPTY socket, so they are not overload and not overheat, and this
-            # integration will not invent an interpretation for them.
-            attrs[ATTR_STATE_CODE] = {
-                "flag3": entry.get("flag3"),
-                "flag4": entry.get("flag4"),
-                "code": entry.get("state_code"),
-            }
         return attrs
 
     # -- writes ------------------------------------------------------
@@ -236,22 +227,28 @@ class MttlW01Switch(CoordinatorEntity[MttlW01StateCoordinator], SwitchEntity):
                 f"Could not switch socket {self._number}: {err}"
             ) from err
 
-        # The command landed. Register the settling window first - the other
+        # The command landed. Register the settling window first - the tapped
+        # socket shows the tapped value at once (see below), and the other
         # sockets of this strip hold last-good until confirmed - and then
         # re-read once the strip's echo has landed and the controller's
         # cache has expired.
         #
-        # Do not flip the switch optimistically. Relay state echoes back within
-        # 1-2s and the physical relay can take up to 20s to close, so an
-        # immediate optimistic read would claim power that has not arrived.
+        # The tapped value displays immediately, deliberately: the controller
+        # accepted the command, and a pre-echo poll would otherwise revert
+        # the tap in the UI for a cycle - the switch visibly bouncing
+        # off-on-off on a single tap. If the echo never confirms (the strip
+        # dropped mid-command), the window expires and strip truth wins
+        # again, so the most this can mislead by is a few seconds on a
+        # command whose fate is genuinely unknown.
         #
-        # A refresh right now would also lie: the controller force-reads state
-        # immediately after sending the command, *before* the strip's echo
-        # lands, and serves that stale reading from its poll-window cache for
-        # the next couple of seconds. So the service call returns immediately
-        # and a background task re-reads ~2.5s later, once the cache has
-        # expired, so the UI shows the strip's own answer after a couple of
-        # seconds instead of on the next scheduled poll.
+        # A refresh right now would still lie about everything else: the
+        # controller force-reads state immediately after sending the command,
+        # *before* the strip's echo lands, and serves that stale reading
+        # from its poll-window cache for the next couple of seconds. So the
+        # service call returns immediately and a background task re-reads
+        # ~2.5s later, once the cache has expired, so the UI shows the
+        # strip's own answer after a couple of seconds instead of on the
+        # next scheduled poll.
         self.coordinator.command_sent(self._devid, self._number, on)
         self._schedule_echo_refresh()
 

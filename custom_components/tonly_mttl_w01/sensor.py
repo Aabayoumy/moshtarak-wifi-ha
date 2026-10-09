@@ -107,15 +107,6 @@ SOCKET_SENSORS: tuple[MttlW01SensorDescription, ...] = (
         value=lambda s: s.get("temp_c"),
         socket=True,
     ),
-    MttlW01SensorDescription(
-        key="state_code",
-        translation_key="socket_state_code",
-        device_class=None,
-        native_unit_of_measurement=None,
-        entity_category=EntityCategory.DIAGNOSTIC,
-        value=lambda s: s.get("state_code"),
-        socket=True,
-    ),
 )
 
 # -- per strip -----------------------------------------------------------------

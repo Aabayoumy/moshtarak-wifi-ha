@@ -46,9 +46,6 @@
       "socket_temperature": {
         "name": "Socket {socket_number} temperature"
       },
-      "socket_state_code": {
-        "name": "Socket {socket_number} state code"
-      },
       "mains_voltage": {
         "name": "Mains voltage"
       },
