@@ -191,10 +191,14 @@ async def async_remove_config_entry_device(
 
 
 def _make_repair_listener(hass: HomeAssistant, entry: ConfigEntry):
-    """Rebuild repair issues whenever the coordinator polls."""
+    """Rebuild repair issues whenever the coordinator polls.
 
-    async def _listener() -> None:
-        await _async_update_repairs(hass, entry)
+    Returns a synchronous callback that schedules the async repair update.
+    Returning an async function directly causes "coroutine never awaited"
+    warnings because the coordinator calls the callback without awaiting it.
+    """
+    def _listener() -> None:
+        hass.async_create_task(_async_update_repairs(hass, entry))
 
     return _listener
 
