@@ -4,12 +4,10 @@ Terminology is not cosmetic in this project, so it is fixed here once.
 
 The strip's firmware numbers its channels its own way:
 
-    physical socket 1 -> firmware channel 2
-    physical socket 2 -> firmware channel 3
-    physical socket 3 -> firmware channel 4
-    physical socket 4 -> firmware channel 1
+    physical socket N -> firmware channel N (identity [1, 2, 3, 4])
 
-That mapping is MEASURED, not derived. Two serious incidents in this project's
+That mapping was re-verified 2026-10-09 by LED blink rounds on D8AA59D270AA
+(an earlier rotated [2,3,4,1] reading was channel/socket confusion). Two serious incidents in this project's
 history came from treating the two numberings as interchangeable, so this
 integration never lets a firmware channel escape into a user-facing name, an
 entity id or a unique_id. It appears in diagnostics only.
@@ -31,7 +29,7 @@ DOMAIN: Final = "tonly_mttl_w01"
 # the repository URL, so every fork and mirror gets a different container name.
 # See host_discovery.py, which asks the Supervisor at runtime instead.
 
-# The controller caches reads for MOSHTARAK_WIFI_POLL seconds (2 in the
+# The controller caches reads for TONLY_MTTL_W01_POLL seconds (2 in the
 # add-on's shipped options), so polling faster than this gains nothing but
 # load. 5s also keeps a switch reading close to the controller's own relay
 # echo time of 1-2s.
@@ -69,3 +67,4 @@ CONF_SCAN_INTERVAL: Final = "scan_interval"
 # Repairs
 ISSUE_NO_REAL_STRIP: Final = "no_real_strip"
 ISSUE_PROTECTION_UNKNOWN: Final = "protection_unknown"
+ISSUE_SOCKET_ORDER_MISMATCH: Final = "socket_order_mismatch"

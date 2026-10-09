@@ -68,6 +68,8 @@ class MttlW01ConfigFlow(ConfigFlow, domain=DOMAIN):
         """Find the controller, or ask where it is."""
         if user_input is not None:
             host = str(user_input[CONF_HOST]).strip().rstrip("/")
+            await self.async_set_unique_id(host)
+            self._abort_if_unique_id_configured()
             if await _probe(async_get_clientsession(self.hass), host):
                 return self.async_create_entry(
                     title=host,
@@ -95,6 +97,8 @@ class MttlW01ConfigFlow(ConfigFlow, domain=DOMAIN):
 
         for host in candidates:
             if await _probe(session, host):
+                await self.async_set_unique_id(host)
+                self._abort_if_unique_id_configured()
                 self._suggested = host
                 return self.async_create_entry(
                     title=host,

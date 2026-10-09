@@ -98,12 +98,12 @@ def _locate_fake_strip() -> Path:
 FAKE_STRIP = _locate_fake_strip()
 
 DEFAULT_HA = "http://10.0.0.11:8123"
-DEFAULT_DEVID = "2CFDB3355BA3"
+DEFAULT_DEVID = "D8AA59D270AA"
 
 # The measured mapping. Physical socket -> firmware channel. Not derived from
 # docs, not derived from the protocol layout: read off the bytes the strip
-# received. socket 1 -> ch 2, socket 2 -> ch 3, socket 3 -> ch 4, socket 4 -> ch 1.
-SOCKET_TO_CHANNEL = {1: 2, 2: 3, 3: 4, 4: 1}
+# received. socket N -> ch N (identity, blink-verified 2026-10-09).
+SOCKET_TO_CHANNEL = {1: 1, 2: 2, 3: 3, 4: 4}
 
 # The add-on's declared options, restored at the end of the run.
 DEFAULT_ADDON_OPTIONS = {
@@ -735,7 +735,7 @@ def main() -> int:
         sensors = [e for e in ents.values()
                    if of_domain(e, "sensor")
                    and (e.endswith("power_unverified")
-                        or e.endswith("energy_vendor_scale_unv")
+                        or e.endswith("energy_vendor_scale_unverified")
                         or e.endswith("temperature"))]
         ck.check(bool(sensors), "power/energy/temperature sensors exist",
                  f"found: {sorted(sensors)}")

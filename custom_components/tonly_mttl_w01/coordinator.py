@@ -210,6 +210,13 @@ class MttlW01StateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 return order
         return []
 
+    def orders(self) -> dict[str, list[int]]:
+        """Live controller order per strip, for the socket-order guard."""
+        if not isinstance(self.data, dict):
+            return {}
+        orders = self.data.get("orders")
+        return dict(orders) if isinstance(orders, dict) else {}
+
     def _devices(self) -> list[dict[str, Any]]:
         if not isinstance(self.data, dict):
             return []
@@ -333,10 +340,11 @@ class MttlW01StateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         states: dict[str, dict[str, Any] | None] = {}
         for devid in ordered:
             try:
-                if devid == SIMULATED_DEVICE_ID:
-                    states[devid] = await self.api.state()
-                else:
-                    states[devid] = await self.api.state(devid)
+                # SIM is polled with an explicit device id so diagnostics never
+                # attribute the real strip's body to the simulator. When a real
+                # strip is live the controller has no SIM reading (raises) and
+                # SIM records None honestly.
+                states[devid] = await self.api.state(devid)
             except MttlW01ApiError as err:
                 # The controller is up; this one strip is not answering. Recorded
                 # as "no reading" for that strip only. Not a failure of the
@@ -352,13 +360,17 @@ class MttlW01StateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             "selected": devices_doc.get("selected") or "",
             "listener": devices_doc.get("listener") or "",
             "order": [],
+            "orders": {},
         }
 
         # `order` lives on the per-strip state body, not on /api/devices.
-        for body in states.values():
+        # Kept per-strip (orders) plus legacy first-body (order) so the
+        # socket-order guard can compare each strip individually.
+        for devid_key, body in states.items():
             if body and isinstance(body.get("order"), list) and len(body["order"]) == 4:
-                payload["order"] = body["order"]
-                break
+                payload["orders"][devid_key] = list(body["order"])
+                if not payload["order"]:
+                    payload["order"] = list(body["order"])
 
         new_strips = [d for d in ordered if d not in self._known]
         if new_strips:
@@ -403,8 +415,14 @@ class MttlW01ProbeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 # does not exist while the strip is not answering.
                 _LOGGER.debug("No measurement from strip %s: %s", devid, err)
                 out[devid] = None
+            except MttlW01StripUnreachable as err:
+                _LOGGER.debug("No measurement from strip %s: %s", devid, err)
+                out[devid] = None
             except MttlW01ApiError as err:
-                raise UpdateFailed(str(err)) from err
+                # One strip's probe failure must not darken every other strip's
+                # voltage/RSSI. Record None for this strip and keep polling.
+                _LOGGER.debug("Probe error for strip %s: %s", devid, err)
+                out[devid] = None
         return out
 
     def measurement(self, devid: str) -> dict[str, Any] | None:
@@ -413,15 +431,18 @@ class MttlW01ProbeCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         return self.data.get(devid)
 
 
-def validate_scan_interval(value: Any) -> timedelta | None:
+def validate_scan_interval(value: Any) -> timedelta:
     """Clamp a configured interval into something sane.
 
-    Zero or negative would mean "poll as fast as possible against a device that
-    answers on a timer", so it is floored rather than trusted.
+    Zero, negative, or corrupt values floor to MIN_SCAN_INTERVAL rather than
+    returning None (which would set update_interval=None and stop polling).
     """
     if not isinstance(value, (int, float)) or isinstance(value, bool):
-        return None
-    return max(MIN_SCAN_INTERVAL, timedelta(seconds=float(value)))
+        return MIN_SCAN_INTERVAL
+    try:
+        return max(MIN_SCAN_INTERVAL, timedelta(seconds=float(value)))
+    except Exception:
+        return MIN_SCAN_INTERVAL
 
 
 __all__ = [

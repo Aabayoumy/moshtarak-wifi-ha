@@ -59,6 +59,10 @@
       "title": "No real MTTL-W01 strip is connected",
       "description": "The MTTL-W01 WiFi controller at {host} is answering, but only its built-in simulator is ({known}).\n\nSimulator readings look exactly like real ones - four healthy sockets, reachable, settled - so the outlets are not being shown rather than being shown as fake. Switches will go unavailable until a real strip connects.\n\nIf you have a strip, provision it to call back to Home Assistant's LAN address and check that port 10086 is not blocked."
     },
+    "socket_order_mismatch": {
+      "title": "Socket order changed — check outlets before switching",
+      "description": "The controller reports order {live} for {device} but the recorded order is {expected}. Switching now could drive the wrong outlet. Verify with an LED blink round, then update tonly_mttl_w01_socket_order.json or POST /api/config."
+    },
     "protection_unknown": {
       "title": "Protection is configured for an unknown strip",
       "description": "Protection is set for: {devices}.\n\nThe controller has never seen a strip with that device id. Because protection is keyed by device id, an id with a typo in it protects NOTHING - so an outlet you believed was locked is in fact switchable.\n\nFix the device id in the app/add-on options, or remove the entry. Note that with no valid per-strip entry the controller falls back to its legacy global list, which is the safe direction."

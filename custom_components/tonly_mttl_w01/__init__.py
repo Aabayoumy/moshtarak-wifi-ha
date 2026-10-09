@@ -37,7 +37,9 @@ from .const import (
     DOMAIN,
     ISSUE_NO_REAL_STRIP,
     ISSUE_PROTECTION_UNKNOWN,
+    ISSUE_SOCKET_ORDER_MISMATCH,
 )
+from .socket_order import load_expected_order
 from .coordinator import (
     MttlW01ProbeCoordinator,
     MttlW01StateCoordinator,
@@ -117,6 +119,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     entry.async_on_unload(state.async_add_listener(_make_repair_listener(hass, entry)))
+    entry.async_on_unload(entry.add_update_listener(async_reload_entry))
 
     _LOGGER.info(
         "MTTL-W01 WiFi ready: %s real strip(s) known to the controller at %s",
@@ -126,11 +129,19 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     return True
 
 
+async def async_reload_entry(hass, entry):
+    await hass.config_entries.async_reload(entry.entry_id)
+
+
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload a config entry."""
     unloaded = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
     if unloaded:
-        for issue_id in (ISSUE_NO_REAL_STRIP, ISSUE_PROTECTION_UNKNOWN):
+        for issue_id in (
+            ISSUE_NO_REAL_STRIP,
+            ISSUE_PROTECTION_UNKNOWN,
+            ISSUE_SOCKET_ORDER_MISMATCH,
+        ):
             ir.async_delete_issue(hass, DOMAIN, issue_id)
     return unloaded
 
@@ -233,6 +244,31 @@ async def _async_update_repairs(hass: HomeAssistant, entry: ConfigEntry) -> None
         for devid in state.protected_by_device()
         if str(devid).upper() not in known
     ]
+    expected = load_expected_order(hass.config.path())
+    if expected is not None:
+        live_orders = state.orders() or {}
+        mismatch = [
+            dev for dev, live in live_orders.items() if list(live) != list(expected)
+        ]
+        if mismatch:
+            ir.async_create_issue(
+                hass,
+                DOMAIN,
+                ISSUE_SOCKET_ORDER_MISMATCH,
+                is_fixable=False,
+                severity=ir.IssueSeverity.ERROR,
+                translation_key=ISSUE_SOCKET_ORDER_MISMATCH,
+                translation_placeholders={
+                    "device": ", ".join(sorted(mismatch)),
+                    "live": ", ".join(str(live_orders[d]) for d in sorted(mismatch)),
+                    "expected": str(expected),
+                },
+            )
+        else:
+            ir.async_delete_issue(hass, DOMAIN, ISSUE_SOCKET_ORDER_MISMATCH)
+    else:
+        ir.async_delete_issue(hass, DOMAIN, ISSUE_SOCKET_ORDER_MISMATCH)
+
     if typo and known:
         ir.async_create_issue(
             hass,

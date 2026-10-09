@@ -31,7 +31,7 @@ async def async_get_config_entry_diagnostics(
 
     out: dict[str, Any] = {
         "config_entry": {
-            "data": async_redact_data(dict(entry.data), []),
+            "data": async_redact_data(dict(entry.data), ["host"]),
             "options": dict(entry.options),
         },
         "controller": {},
