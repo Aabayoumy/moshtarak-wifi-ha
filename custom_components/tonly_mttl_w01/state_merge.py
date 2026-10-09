@@ -190,14 +190,16 @@ def merge_switches(
             merged[socket] = memory.want
             memory.good[socket] = value
             continue
-        if value == known:
-            merged[socket] = value
-            continue
         if in_window:
-            # Hold, unconditionally: see the module docstring for why a
-            # second agreeing poll is not confirmation.
+            # During any quarantine window, hold ALL sockets at last-good
+            # to prevent cross-socket contamination from the controller's
+            # stale poll cache (2s window). This prevents "other sockets
+            # bounce" when one socket is toggled.
             merged[socket] = known
             held.append(socket)
+            continue
+        if value == known:
+            merged[socket] = value
             continue
         merged[socket] = value
         memory.good[socket] = value
