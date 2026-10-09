@@ -108,6 +108,21 @@ There is a [diagnostics download](https://www.home-assistant.io/integrating/\
 diagnostics/) per entry that includes the socket/channel mapping, raw per-strip
 state and the controller's own view.
 
+### After you tap a switch
+
+No optimistic flip: the switch moves when the strip's echo says it moved,
+a couple of seconds later. Two things protect the other three switches in
+that window. First, the controller force-reads the strip the instant it
+sends a command - before the echo lands - and caches that not-yet-true
+answer; a mid-transition status block can also carry transient values on
+untouched channels. So for ~12 s after a tap, the other sockets hold their
+last-good state until two consecutive polls agree on a change. Second, a
+poll body that is not even well-shaped (no `switches`, or anything but
+exactly sockets 1-4) is treated as no information: the last frame is reused
+briefly, and only persistent rot reads as unavailable. The tapped socket
+itself always shows strip truth. The policy is pure data in
+`state_merge.py`, covered by `tests/test_state_merge.py`.
+
 ## Three things this integration refuses to do
 
 ### 1. Pretend the simulator is your hardware

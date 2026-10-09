@@ -102,6 +102,10 @@ class MttlW01Switch(CoordinatorEntity[MttlW01StateCoordinator], SwitchEntity):
             "name": self._strip_name(doc, devid),
             "sw_version": str(doc.get("firmware") or ""),
         }
+        # Handle of the pending post-command re-read, if any. A second tap
+        # cancels the first tap's refresh: overlapping echo tasks would only
+        # re-read the same settling strip twice.
+        self._echo_task: asyncio.Task[None] | None = None
 
     # -- naming ------------------------------------------------------
 
@@ -222,10 +226,21 @@ class MttlW01Switch(CoordinatorEntity[MttlW01StateCoordinator], SwitchEntity):
             # "failed" would throw away.
             raise HomeAssistantError(str(err)) from err
         except Exception as err:  # noqa: BLE001
+            # The tap may or may not have landed - a timeout after the strip
+            # applied is the classic case. No quarantine is recorded, because
+            # there is no known transition to settle, but one prompt re-read
+            # still resyncs the UI instead of sitting stale until the next
+            # scheduled poll.
+            self._schedule_echo_refresh()
             raise HomeAssistantError(
                 f"Could not switch socket {self._number}: {err}"
             ) from err
 
+        # The command landed. Register the settling window first - the other
+        # sockets of this strip hold last-good until confirmed - and then
+        # re-read once the strip's echo has landed and the controller's
+        # cache has expired.
+        #
         # Do not flip the switch optimistically. Relay state echoes back within
         # 1-2s and the physical relay can take up to 20s to close, so an
         # immediate optimistic read would claim power that has not arrived.
@@ -237,7 +252,22 @@ class MttlW01Switch(CoordinatorEntity[MttlW01StateCoordinator], SwitchEntity):
         # and a background task re-reads ~2.5s later, once the cache has
         # expired, so the UI shows the strip's own answer after a couple of
         # seconds instead of on the next scheduled poll.
-        self.hass.async_create_task(self._async_refresh_after_echo())
+        self.coordinator.command_sent(self._devid, self._number, on)
+        self._schedule_echo_refresh()
+
+    def _schedule_echo_refresh(self) -> None:
+        """Schedule the post-command re-read, cancelling any older one.
+
+        A second tap supersedes the first tap's refresh: the older task was
+        going to re-read a strip that has since been commanded again, so its
+        result would only add load, never information.
+        """
+        old = self._echo_task
+        if old is not None and not old.done():
+            old.cancel()
+        self._echo_task = self.hass.async_create_task(
+            self._async_refresh_after_echo()
+        )
 
     async def _async_refresh_after_echo(self) -> None:
         """Re-read after the strip's echo has landed and the cache expired.

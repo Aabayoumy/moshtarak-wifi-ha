@@ -27,6 +27,7 @@ Every availability decision here therefore asks whether a REAL strip answered.
 from __future__ import annotations
 
 import logging
+import time
 from collections.abc import Awaitable, Callable
 from datetime import timedelta
 from typing import Any
@@ -45,6 +46,12 @@ from .const import (
     MIN_SCAN_INTERVAL,
     PROBE_INTERVAL,
     SIMULATED_DEVICE_ID,
+)
+from .state_merge import (
+    StripMemory,
+    merge_switches,
+    note_command,
+    parse_switches,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -70,6 +77,11 @@ class MttlW01StateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self.api = api
         self._platforms: list[PlatformAdder] = []
         self._known: list[str] = []
+        # Per-strip merge memory for the settling policy in state_merge.py:
+        # last-good socket states, post-command quarantines, malformed-body
+        # streaks. Plain data; it dies with the coordinator on reload, which
+        # is correct - a fresh setup trusts the first valid poll outright.
+        self._merge: dict[str, StripMemory] = {}
 
     # -- platform registration --------------------------------------
 
@@ -208,6 +220,68 @@ class MttlW01StateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 return dev
         return None
 
+    def command_sent(self, devid: str, socket: int, want: bool) -> None:
+        """Record a successful switch command for the settling policy.
+
+        Called only after the controller accepted the command - never for a
+        refused or failed one, where there is no transition to settle. The
+        commanded socket keeps rendering strip truth; the other sockets of
+        this strip hold last-good until confirmed. See state_merge.py.
+        """
+        memory = self._merge.setdefault(
+            str(devid).strip().upper(), StripMemory()
+        )
+        note_command(memory, socket, want, time.monotonic())
+
+    def _merge_states(
+        self, states: dict[str, dict[str, Any] | None]
+    ) -> dict[str, dict[str, Any] | None]:
+        """Fold one poll's strip bodies through the settling policy.
+
+        Bodies that are not even well-shaped carry no information: the last
+        good frame is reused briefly, and only persistent rot reads as
+        unavailable. Well-shaped bodies have their socket states merged
+        against post-command quarantines. Everything else in the body -
+        power, telemetry, protection - flows through untouched.
+        """
+        now = time.monotonic()
+        for devid, body in states.items():
+            if body is None:
+                # Transport-level failure for this strip: the existing
+                # unavailable path, unchanged. Memory is left alone; wall
+                # clock expires any quarantine on its own.
+                continue
+            memory = self._merge.setdefault(
+                str(devid).strip().upper(), StripMemory()
+            )
+            reported = parse_switches(body)
+            result = merge_switches(memory, reported, now)
+            if result.dropped:
+                states[devid] = None
+                _LOGGER.debug(
+                    "Strip %s unreadable, marking unavailable", devid
+                )
+            elif result.frozen:
+                states[devid] = memory.last_body
+                _LOGGER.debug(
+                    "Strip %s sent a malformed block, freezing last frame",
+                    devid,
+                )
+            else:
+                for entry in body.get("switches", []):
+                    number = entry.get("socket") if isinstance(entry, dict) else None
+                    if isinstance(number, int) and number in result.merged:
+                        entry["on"] = result.merged[number]
+                memory.last_body = body
+                if result.held:
+                    _LOGGER.debug(
+                        "Holding socket(s) %s of strip %s at last-good "
+                        "until confirmed",
+                        sorted(result.held),
+                        devid,
+                    )
+        return states
+
     # -- the update --------------------------------------------------
 
     async def _async_update_data(self) -> dict[str, Any]:
@@ -253,7 +327,7 @@ class MttlW01StateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 states[devid] = None
 
         payload: dict[str, Any] = {
-            "states": states,
+            "states": self._merge_states(states),
             "devices": devices,
             "protection_by_device": devices_doc.get("protection_by_device") or {},
             "selected": devices_doc.get("selected") or "",

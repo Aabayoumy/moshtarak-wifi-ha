@@ -27,6 +27,20 @@ nothing is deleted at all), and the hook's exact name — Home Assistant finds
 it with `hasattr`, so a rename would not crash, it would silently turn the
 feature back off.
 
+## `test_state_merge.py` — no Home Assistant needed
+
+```
+python3 tests/test_state_merge.py
+```
+
+Pure stdlib. After a switch command the controller serves a force-read taken
+before the strip's echo lands, and mid-transition blocks can carry transient
+values on untouched channels — rendered verbatim, the *other* switches flap.
+This pins down the settling policy in `state_merge.py`: the commanded socket
+always renders strip truth, other sockets hold last-good until two polls
+agree or the window expires, malformed bodies freeze then escalate, and a
+second tap restarts the window.
+
 ## `verify_live.py` — needs a running Home Assistant
 
 ```
